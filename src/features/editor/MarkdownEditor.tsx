@@ -4,9 +4,11 @@ import { useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
+import { ResetIcon } from "@/components/icons/ResetIcon";
+import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
 export function MarkdownEditor() {
-  const { content, setContent } = useMarkdownContentStore();
+  const { content, setContent, resetContent } = useMarkdownContentStore();
 
   const handleChange = useCallback(
     (value: string) => {
@@ -17,10 +19,27 @@ export function MarkdownEditor() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-apple-border bg-white">
-        <h2 className="text-sm font-medium text-gray-700">Markdown 编辑器</h2>
+      <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={resetContent}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <ResetIcon className="w-4 h-4" />
+            重置示例
+          </button>
+          <button
+            type="button"
+            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="更多选项"
+          >
+            <KebabMenuIcon className="w-4 h-4" />
+          </button>
+        </div>
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto min-h-0">
         <CodeMirror
           value={content}
           height="100%"

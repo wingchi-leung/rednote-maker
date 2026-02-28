@@ -18,15 +18,12 @@ export default function Home() {
       {/* Settings Toolbar */}
       <SettingsToolbar />
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Editor Section */}
-        <div className="w-1/2 min-w-0 border-r border-apple-border">
+      {/* Main Content - 卡片式布局 */}
+      <div className="flex-1 flex gap-6 p-6 overflow-hidden bg-apple-gray6">
+        <div className="w-1/2 min-w-0 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
           <MarkdownEditor />
         </div>
-
-        {/* Preview Section */}
-        <div className="w-1/2 min-w-0">
+        <div className="w-1/2 min-w-0 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
           <ImagePreview />
         </div>
       </div>

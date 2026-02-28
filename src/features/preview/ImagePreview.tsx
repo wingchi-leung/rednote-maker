@@ -100,7 +100,7 @@ export function ImagePreview() {
         ref={(el) => {
           exportRefs.current[index] = el;
         }}
-        className="card-content"
+        className="card-content rounded-lg overflow-hidden"
         style={{
           backgroundColor: currentColors.background,
           color: currentColors.text,
@@ -161,36 +161,36 @@ export function ImagePreview() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-apple-border bg-white">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-700">预览</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrevPage}
-              disabled={currentPage === 0}
-              className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronLeftIcon />
-            </button>
-            <span className="text-sm text-gray-600">
-              {pages.length > 0 ? currentPage + 1 : 0} / {pages.length}
-            </span>
-            <button
-              onClick={goToNextPage}
-              disabled={currentPage >= pages.length - 1}
-              className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronRightIcon />
-            </button>
-          </div>
+      {/* Card Header */}
+      <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-medium text-gray-700">图片预览</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToPrevPage}
+            disabled={currentPage === 0}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+            aria-label="上一页"
+          >
+            <ChevronLeftIcon />
+          </button>
+          <span className="text-sm text-gray-600 min-w-[3rem] text-center">
+            {pages.length > 0 ? currentPage + 1 : 0} / {pages.length}
+          </span>
+          <button
+            onClick={goToNextPage}
+            disabled={currentPage >= pages.length - 1}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+            aria-label="下一页"
+          >
+            <ChevronRightIcon />
+          </button>
         </div>
       </div>
 
-      {/* Preview Area */}
-      <div className="flex-1 flex items-center justify-center p-6 overflow-auto bg-gray-100">
+      {/* 嵌套卡片：预览内容区 */}
+      <div className="flex-1 flex items-center justify-center p-6 overflow-auto min-h-0 bg-[#F5F5F7]">
         <div
-          className="shadow-lg"
+          className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden"
           style={{
             width: "100%",
             maxWidth: "400px",
