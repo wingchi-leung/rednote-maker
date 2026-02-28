@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { ResetIcon } from "@/components/icons/ResetIcon";
@@ -39,11 +40,11 @@ export function MarkdownEditor() {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto min-h-0">
         <CodeMirror
           value={content}
           height="100%"
-          extensions={[markdown()]}
+          extensions={[markdown(), EditorView.lineWrapping]}
           onChange={handleChange}
           className="text-sm"
           basicSetup={{
