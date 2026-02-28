@@ -1,39 +1,22 @@
 "use client";
 
-import { SettingsPanel } from "@/features/configurator/SettingsPanel";
-import { SettingsIcon } from "@/components/icons/SettingsIcon";
-import { useSettingsPanelStore } from "@/store/useSettingsPanelStore";
 import { MarkdownEditor } from "@/features/editor/MarkdownEditor";
 import { ImagePreview } from "@/features/preview/ImagePreview";
+import { SettingsToolbar } from "@/components/toolbar/SettingsToolbar";
 
 export default function Home() {
-  const { isOpen, togglePanel } = useSettingsPanelStore();
-
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-apple-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-apple-blue rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">RN</span>
-          </div>
-          <h1 className="text-lg font-semibold text-gray-800">RedNoteMaker</h1>
+      <header className="bg-white border-b border-apple-border px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 bg-apple-blue rounded-lg flex items-center justify-center">
+          <span className="text-white font-bold text-sm">RN</span>
         </div>
-        <button
-          onClick={togglePanel}
-          className={`
-            px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2
-            ${
-              isOpen
-                ? "bg-apple-blue text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }
-          `}
-        >
-          <SettingsIcon />
-          {isOpen ? "关闭设置" : "设置"}
-        </button>
+        <h1 className="text-lg font-semibold text-gray-800">RedNoteMaker</h1>
       </header>
+
+      {/* Settings Toolbar */}
+      <SettingsToolbar />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -47,9 +30,6 @@ export default function Home() {
           <ImagePreview />
         </div>
       </div>
-
-      {/* Settings Panel */}
-      <SettingsPanel />
     </div>
   );
 }

@@ -35,7 +35,7 @@ export function ImagePreview() {
   useEffect(() => {
     const handleExport = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { pages: pagesToExport, onProgress } = customEvent.detail;
+      const { pages: pagesToExport, onProgress, onComplete } = customEvent.detail;
       setIsExporting(true);
 
       try {
@@ -67,6 +67,7 @@ export function ImagePreview() {
         }
       } finally {
         setIsExporting(false);
+        onComplete?.();
       }
     };
 
