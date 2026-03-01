@@ -157,14 +157,31 @@ export function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
   return blocks;
 }
 
+function isOrderedListItem(content: string): boolean {
+  return /^\d+\.\s/.test(content);
+}
+
+function isUnorderedListItem(content: string): boolean {
+  return /^[-*+]\s/.test(content);
+}
+
 function blocksToMarkdown(blocks: ContentBlock[]): string {
   return blocks
-    .map((block) => {
+    .map((block, index) => {
       switch (block.type) {
         case "heading":
           return `${"#".repeat(block.level || 1)} ${block.content}`;
         case "empty":
           return "";
+        case "list": {
+          const prev = index > 0 ? blocks[index - 1] : null;
+          const prevWasOrdered = prev?.type === "list" && prev.content && isOrderedListItem(prev.content);
+          const currentUnordered = isUnorderedListItem(block.content);
+          if (currentUnordered && prevWasOrdered) {
+            return "  " + block.content;
+          }
+          return block.content;
+        }
         default:
           return block.content;
       }
@@ -255,7 +272,9 @@ function estimateBlockHeight(
   switch (block.type) {
     case "heading": {
       const level = block.level || 1;
-      const headingFontSize = fontSize * (level === 1 ? 2 : level === 2 ? 1.75 : 1.5);
+      const headingMultiplier =
+        level === 1 ? 2 : level === 2 ? 1.75 : level === 3 ? 1.5 : level === 4 ? 1.35 : level === 5 ? 1.2 : 1.1;
+      const headingFontSize = fontSize * headingMultiplier;
       const headingLineHeight = headingFontSize * lineHeightRatio;
       const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.65));
       const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));

@@ -14,14 +14,13 @@ export function LandingPreviewCard() {
           左侧编辑 Markdown，右侧实时预览卡片，导出即发小红书
         </p>
         <div className="flex justify-center">
-          <div className="w-full max-w-[280px] rounded-2xl overflow-hidden shadow-xl shadow-black/8 border border-apple-border">
+          <div className="w-full max-w-[640px] max-h-[60vh] rounded-2xl overflow-hidden shadow-xl shadow-black/8 border border-apple-border flex items-center justify-center bg-white">
             <Image
               src={previewImage}
               alt="RedNoteMaker 编辑与预览界面示意"
               width={previewImage.width}
               height={previewImage.height}
-              className="w-full h-auto object-cover"
-              style={{ aspectRatio: "3/4" }}
+              className="max-w-full max-h-[60vh] w-auto h-auto object-contain"
               priority
             />
           </div>
