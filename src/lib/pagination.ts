@@ -333,7 +333,7 @@ function splitOversizedBlock(
   const chunks: ContentBlock[] = [];
 
   const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * context.lineHeightRatio));
-  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.7);
+  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.75);
 
   if (charsPerPage < 30) {
     return [block];
@@ -387,8 +387,8 @@ function calculatePagesByHeight(
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用 65% 的可用高度（更激进）
-  const safeAvailableHeight = availableHeight * 0.65;
+  // 使用 60% 的可用高度（继续减少丢字）
+  const safeAvailableHeight = availableHeight * 0.60;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
