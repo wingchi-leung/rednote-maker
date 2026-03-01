@@ -31,11 +31,51 @@ export function ImagePreview() {
   const exportRefs = useRef<(HTMLElement | null)[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<PreviewViewMode>("pagination");
+  // 竖排模式下滚动时可见的页码（用于右上角页码显示）
+  const [visiblePageInList, setVisiblePageInList] = useState(0);
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const listCardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // 内容变短时把当前页钳在有效范围内
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, Math.max(0, pages.length - 1)));
   }, [pages.length]);
+
+  // 竖排模式：根据滚动位置计算当前可见页（用于右上角页码）
+  const updateVisiblePageFromScroll = useCallback(() => {
+    const container = listScrollRef.current;
+    if (!container || viewMode !== "list" || pages.length === 0) return;
+    const refs = listCardRefs.current;
+    const viewportCenter = container.scrollTop + container.clientHeight / 2;
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    const n = Math.min(refs.length, pages.length);
+    for (let i = 0; i < n; i++) {
+      const el = refs[i];
+      if (!el) continue;
+      const cardCenter = el.offsetTop + el.offsetHeight / 2;
+      const distance = Math.abs(cardCenter - viewportCenter);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    setVisiblePageInList(Math.min(bestIndex, pages.length - 1));
+  }, [viewMode, pages.length]);
+
+  useEffect(() => {
+    if (viewMode !== "list" || pages.length === 0) return;
+    const container = listScrollRef.current;
+    if (!container) return;
+    const run = () => updateVisiblePageFromScroll();
+    run();
+    const t = requestAnimationFrame(run); // ref 挂载后再算一次
+    container.addEventListener("scroll", updateVisiblePageFromScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(t);
+      container.removeEventListener("scroll", updateVisiblePageFromScroll);
+    };
+  }, [viewMode, pages.length, updateVisiblePageFromScroll]);
 
   // Handle export event: pageIndices 为要导出的页码（0-based），多张时打包为 zip
   useEffect(() => {
@@ -284,34 +324,50 @@ export function ImagePreview() {
 
       {/* 预览区：固定 450×600 与导出 900×1200 一致（scale 2） */}
       <div
-        className={`flex-1 min-h-0 bg-[#F5F5F7] ${
+        className={`flex-1 min-h-0 bg-[#F5F5F7] relative ${
           viewMode === "list"
             ? "flex flex-col overflow-hidden"
             : "flex items-center justify-center p-3 overflow-auto"
         }`}
       >
         {viewMode === "list" && !isExporting ? (
-          <div className="flex-1 overflow-y-auto p-3">
+          <>
             <div
-              className="flex flex-col items-center gap-4 mx-auto"
-              style={{
-                width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
-              }}
+              ref={listScrollRef}
+              className="flex-1 overflow-y-auto p-3"
             >
-              {pages.map((pageContent, index) => (
-                <div
-                  key={index}
-                  className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
-                  style={{
-                    width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
-                    height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
-                  }}
-                >
-                  {renderPage(pageContent, index, true)}
-                </div>
-              ))}
+              <div
+                className="flex flex-col items-center gap-4 mx-auto"
+                style={{
+                  width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+                }}
+              >
+                {pages.map((pageContent, index) => (
+                  <div
+                    key={index}
+                    ref={(el) => {
+                      listCardRefs.current[index] = el;
+                    }}
+                    className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
+                    style={{
+                      width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+                      height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
+                    }}
+                  >
+                    {renderPage(pageContent, index, true)}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+            {pages.length > 0 && (
+              <div
+                className="absolute top-2 right-2 z-10 px-2 py-1 rounded-md text-xs font-medium bg-black/50 text-white shadow-sm pointer-events-none"
+                aria-live="polite"
+              >
+                {visiblePageInList + 1} / {pages.length}
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex-1 flex items-center justify-center p-3 overflow-auto min-h-0 w-full">
             <div

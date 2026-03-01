@@ -143,8 +143,16 @@ function calculatePagesFromBlocks(
       continue;
     }
 
-    if (currentPageChars + blockChars > maxCharsPerPage && currentPageBlocks.length > 0) {
-      if (block.type === "heading" && currentPageChars < maxCharsPerPage * 0.7) {
+    // 用实际长度判断是否超页，避免估算偏小导致最后一页溢出、末尾 100～200 字被裁掉
+    const wouldBeContent = blocksToMarkdown([...currentPageBlocks, block]);
+    const wouldExceed =
+      wouldBeContent.length > maxCharsPerPage && currentPageBlocks.length > 0;
+
+    if (wouldExceed) {
+      if (
+        block.type === "heading" &&
+        currentPageChars < maxCharsPerPage * 0.7
+      ) {
         pages.push(blocksToMarkdown(currentPageBlocks));
         currentPageBlocks = [block];
         currentPageChars = blockChars;
