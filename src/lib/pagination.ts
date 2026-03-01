@@ -1,6 +1,6 @@
 /**
- * 基于真实 React 渲染的精确分页算法
- * 使用真正的 ReactMarkdown 组件测量，自动适配所有模板
+ * 基于数学估算 + 真实DOM测量的混合分页算法
+ * 用真实测量校准估算系数，解决丢字问题
  */
 
 import { CARD_CONFIG } from "./constants";
@@ -53,96 +53,53 @@ const TEMPLATE_EXTRA_HEIGHT = {
 } as const;
 
 // ============================================================================
-// 真实DOM测量（使用 React 组件）
+// 真实DOM测量（用于校准）
 // ============================================================================
 
 const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
 
 let measureContainer: HTMLElement | null = null;
-let measureRoot: any = null;
-let MeasureComponent: any = null;
 
 /**
- * 初始化测量容器和 React 组件
+ * 用真实DOM测量一段简单文本的实际高度
+ * 用于校准估算值
  */
-function initMeasureContainer(): boolean {
-  if (!isBrowser) return false;
-
-  if (measureContainer) {
-    return true;
-  }
-
-  try {
-    // 动态导入 React 组件
-    import("./MeasureContent").then((module) => {
-      MeasureComponent = module.MeasureContent;
-    });
-
-    measureContainer = document.createElement("div");
-    measureContainer.style.position = "absolute";
-    measureContainer.style.visibility = "hidden";
-    measureContainer.style.pointerEvents = "none";
-    measureContainer.style.top = "0";
-    measureContainer.style.left = "0";
-    measureContainer.style.width = `${CARD_CONFIG.width}px`;
-    measureContainer.style.height = `${CARD_CONFIG.height}px`;
-    measureContainer.style.overflow = "hidden";
-    measureContainer.style.zIndex = "-1";
-    document.body.appendChild(measureContainer);
-
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-/**
- * 测量 Markdown 的实际渲染高度
- */
-function measureMarkdownHeight(
-  markdown: string,
-  theme: Theme,
-  fontSize: FontSize,
-  density: Density
+function getRealTextHeight(
+  padding: number,
+  fontSize: number,
+  lineHeightRatio: number
 ): number | null {
-  if (!isBrowser || !measureContainer || !MeasureComponent) {
-    return null;
-  }
+  if (!isBrowser) return null;
 
   try {
-    // 使用 React 渲染组件
-    const React = require("react");
-    const { createRoot } = require("react-dom/client");
-
-    if (!measureRoot) {
-      measureRoot = createRoot(measureContainer);
+    if (!measureContainer) {
+      measureContainer = document.createElement("div");
+      measureContainer.style.position = "absolute";
+      measureContainer.style.visibility = "hidden";
+      measureContainer.style.pointerEvents = "none";
+      measureContainer.style.top = "0";
+      measureContainer.style.left = "0";
+      measureContainer.style.width = `${CARD_CONFIG.width}px`;
+      measureContainer.style.padding = `${padding}px`;
+      measureContainer.style.boxSizing = "border-box";
+      measureContainer.style.fontSize = `${fontSize}px`;
+      measureContainer.style.lineHeight = lineHeightRatio.toString();
+      measureContainer.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      measureContainer.style.overflow = "hidden";
+      measureContainer.style.wordBreak = "break-word";
+      document.body.appendChild(measureContainer);
     }
 
-    let measuredHeight = 0;
-
-    // 渲染测量组件
-    measureRoot.render(
-      React.createElement(MeasureComponent, {
-        markdown,
-        theme,
-        fontSize,
-        density,
-        onHeightChange: (height: number) => {
-          measuredHeight = height;
-        },
-      })
-    );
-
-    // 强制更新
-    measureContainer.offsetHeight;
-
-    // 获取高度
-    if (measureContainer.firstElementChild) {
-      const height = measureContainer.firstElementChild.scrollHeight;
-      return height;
+    // 测量10行普通文本的高度
+    measureContainer.innerHTML = "";
+    for (let i = 0; i < 10; i++) {
+      const p = document.createElement("p");
+      p.style.margin = "0 0 " + (fontSize * 0.5) + "px 0";
+      p.textContent = "这是一行测试文字用于测量实际渲染高度";
+      measureContainer.appendChild(p);
     }
 
-    return null;
+    return measureContainer.scrollHeight / 10; // 返回单行高度
   } catch (e) {
     return null;
   }
@@ -228,8 +185,10 @@ interface RenderContext {
   lineHeightRatio: number;
   extraTopSpace: number;
   contentWidthReduction: number;
-  theme: Theme;
-  density: Density;
+  // 校准系数：从真实测量获得
+  calibrationFactor: number;
+  // 模板配置
+  template: ReturnType<typeof getTemplate>;
 }
 
 function getRenderContext(options: PaginationOptions): RenderContext {
@@ -252,7 +211,7 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     contentWidthReduction = (CARD_CONFIG.width * sideMarginPercent * 2) / 100;
   }
 
-  return {
+  const context: RenderContext = {
     cardWidth: CARD_CONFIG.width,
     cardHeight: CARD_CONFIG.height,
     padding: densityConfig.padding,
@@ -261,46 +220,37 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     lineHeightRatio: densityConfig.lineHeightRatio,
     extraTopSpace,
     contentWidthReduction,
-    theme: options.theme,
-    density: options.density,
+    calibrationFactor: 1.0, // 默认值
+    template,
   };
+
+  // 用真实测量校准
+  const realHeight = getRealTextHeight(densityConfig.padding, fontSize, densityConfig.lineHeightRatio);
+  if (realHeight) {
+    const estimatedHeight = lineHeight + fontSize * 0.5;
+    context.calibrationFactor = realHeight / estimatedHeight;
+    // 限制校准系数在合理范围 [0.8, 1.3]
+    context.calibrationFactor = Math.max(0.8, Math.min(1.3, context.calibrationFactor));
+  }
+
+  return context;
 }
 
 function getAvailableContentHeight(context: RenderContext): number {
   return context.cardHeight - context.padding * 2 - context.extraTopSpace;
 }
 
-/**
- * 测量块的实际高度（优先使用真实测量，回退到估算）
- */
-function measureBlockHeight(
-  block: ContentBlock,
-  context: RenderContext
-): number {
-  // 尝试使用真实 DOM 测量
-  const markdown = blocksToMarkdown([block]);
-  const measuredHeight = measureMarkdownHeight(markdown, context.theme, (context.fontSize === 14 ? "sm" : context.fontSize === 16 ? "md" : "lg"), context.density);
-
-  if (measuredHeight !== null) {
-    return measuredHeight;
-  }
-
-  // 回退到估算
-  return estimateBlockHeight(block, context);
-}
-
-/**
- * 估算块的高度（回退方案）
- */
 function estimateBlockHeight(
   block: ContentBlock,
   context: RenderContext
 ): number {
-  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction } = context;
+  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction, calibrationFactor } = context;
 
   const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
   const avgCharWidth = fontSize * 0.65;
   const charsPerLine = Math.floor(contentWidth / avgCharWidth);
+
+  let estimatedHeight = 0;
 
   switch (block.type) {
     case "heading": {
@@ -311,7 +261,8 @@ function estimateBlockHeight(
       const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));
       const marginBottom = fontSize;
       const marginTop = level === 1 ? fontSize * 0.5 : fontSize * 1.2;
-      return headingLineHeight * lines + marginBottom + marginTop;
+      estimatedHeight = headingLineHeight * lines + marginBottom + marginTop;
+      break;
     }
 
     case "paragraph": {
@@ -325,29 +276,36 @@ function estimateBlockHeight(
           totalHeight += lineHeight * textLines;
         }
       }
-      return totalHeight + fontSize * 0.9;
+      estimatedHeight = totalHeight + fontSize * 0.9;
+      break;
     }
 
     case "list": {
       const listContentWidth = contentWidth - 28;
       const listCharsPerLine = Math.floor(listContentWidth / avgCharWidth);
       const lines = Math.max(1, Math.ceil(block.content.length / listCharsPerLine));
-      return lineHeight * lines + fontSize * 0.5;
+      estimatedHeight = lineHeight * lines + fontSize * 0.5;
+      break;
     }
 
     case "code": {
       const codeLineHeight = fontSize * 1.5;
       const lines = block.content.split("\n").length;
-      return codeLineHeight * lines + fontSize * 0.9;
+      estimatedHeight = codeLineHeight * lines + fontSize * 0.9;
+      break;
     }
 
     case "empty": {
-      return lineHeight;
+      estimatedHeight = lineHeight;
+      break;
     }
 
     default:
-      return lineHeight;
+      estimatedHeight = lineHeight;
   }
+
+  // 应用校准系数
+  return estimatedHeight * calibrationFactor;
 }
 
 // ============================================================================
@@ -359,7 +317,7 @@ function splitOversizedBlock(
   maxAvailableHeight: number,
   context: RenderContext
 ): ContentBlock[] {
-  const blockHeight = measureBlockHeight(block, context);
+  const blockHeight = estimateBlockHeight(block, context);
 
   if (blockHeight <= maxAvailableHeight) {
     return [block];
@@ -432,18 +390,23 @@ function calculatePagesByHeight(
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用 70% 的可用高度作为安全边距（使用真实测量后可以更精确）
-  const safeAvailableHeight = availableHeight * 0.70;
+  // 根据模板类型调整安全边距
+  let safeMargin = 0.60; // 默认
+  if (context.template.id === "dark") {
+    safeMargin = 0.55; // dark 模板有 QuoteIcon 占用右上角空间
+  } else if (context.template.decoration === "sketch") {
+    safeMargin = 0.50; // sketch 模板有装饰占用空间，需要更保守
+  } else if (context.template.layout === "appleNotes") {
+    safeMargin = 0.58; // appleNotes 有头部，稍微保守一点
+  }
+
+  const safeAvailableHeight = availableHeight * safeMargin;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
 
   for (const block of blocks) {
-    if (block.type === "empty") {
-      continue;
-    }
-
-    const blockHeight = measureBlockHeight(block, context);
+    const blockHeight = estimateBlockHeight(block, context);
 
     if (blockHeight > safeAvailableHeight) {
       if (currentPageBlocks.length > 0) {
@@ -455,7 +418,7 @@ function calculatePagesByHeight(
       const splitChunks = splitOversizedBlock(block, safeAvailableHeight, context);
 
       for (const chunk of splitChunks) {
-        const chunkHeight = measureBlockHeight(chunk, context);
+        const chunkHeight = estimateBlockHeight(chunk, context);
         if (currentPageHeight + chunkHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
           pages.push(currentPageBlocks);
           currentPageBlocks = [chunk];
@@ -505,9 +468,6 @@ export function calculatePages(
     return [""];
   }
 
-  // 初始化测量容器
-  initMeasureContainer();
-
   let paginationOptions: PaginationOptions;
   if (typeof options === "number") {
     paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
@@ -536,12 +496,6 @@ export function calculatePages(
  * 清理测量容器
  */
 export function cleanupMeasureContainer(): void {
-  if (measureRoot) {
-    try {
-      measureRoot.unmount();
-    } catch (e) {}
-    measureRoot = null;
-  }
   if (measureContainer && measureContainer.parentNode) {
     measureContainer.parentNode.removeChild(measureContainer);
   }
