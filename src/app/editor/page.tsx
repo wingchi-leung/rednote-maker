@@ -3,15 +3,14 @@
 import { MarkdownEditor } from "@/features/editor/MarkdownEditor";
 import { ImagePreview } from "@/features/preview/ImagePreview";
 import { SettingsToolbar } from "@/components/toolbar/SettingsToolbar";
+import { BrandMark } from "@/components/brand/BrandMark";
 
 export default function EditorPage() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-apple-border px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-apple-blue rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">RN</span>
-        </div>
+        <BrandMark />
         <h1 className="text-lg font-semibold text-gray-800">RedNoteMaker</h1>
       </header>
 

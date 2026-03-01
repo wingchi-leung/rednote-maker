@@ -1,6 +1,6 @@
 /**
- * 基于数学估算的智能分页算法
- * 使用保守策略避免丢字
+ * 基于数学估算 + 真实DOM测量的混合分页算法
+ * 用真实测量校准估算系数，解决丢字问题
  */
 
 import { CARD_CONFIG } from "./constants";
@@ -47,21 +47,68 @@ const FONT_SIZE_CONFIG = {
 
 // 模板额外高度配置（像素）
 const TEMPLATE_EXTRA_HEIGHT = {
-  // appleNotes 布局有头部：padding 12px*2 + 内容约 25px = ~50px
   appleNotesHeader: 50,
-  // cardFrame 顶部有 marginTop: 24px
   cardFrameTopMargin: 24,
-  // cardFrame 顶线：1px
   cardFrameTopLine: 1,
 } as const;
+
+// ============================================================================
+// 真实DOM测量（用于校准）
+// ============================================================================
+
+const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
+
+let measureContainer: HTMLElement | null = null;
+
+/**
+ * 用真实DOM测量一段简单文本的实际高度
+ * 用于校准估算值
+ */
+function getRealTextHeight(
+  padding: number,
+  fontSize: number,
+  lineHeightRatio: number
+): number | null {
+  if (!isBrowser) return null;
+
+  try {
+    if (!measureContainer) {
+      measureContainer = document.createElement("div");
+      measureContainer.style.position = "absolute";
+      measureContainer.style.visibility = "hidden";
+      measureContainer.style.pointerEvents = "none";
+      measureContainer.style.top = "0";
+      measureContainer.style.left = "0";
+      measureContainer.style.width = `${CARD_CONFIG.width}px`;
+      measureContainer.style.padding = `${padding}px`;
+      measureContainer.style.boxSizing = "border-box";
+      measureContainer.style.fontSize = `${fontSize}px`;
+      measureContainer.style.lineHeight = lineHeightRatio.toString();
+      measureContainer.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      measureContainer.style.overflow = "hidden";
+      measureContainer.style.wordBreak = "break-word";
+      document.body.appendChild(measureContainer);
+    }
+
+    // 测量10行普通文本的高度
+    measureContainer.innerHTML = "";
+    for (let i = 0; i < 10; i++) {
+      const p = document.createElement("p");
+      p.style.margin = "0 0 " + (fontSize * 0.5) + "px 0";
+      p.textContent = "这是一行测试文字用于测量实际渲染高度";
+      measureContainer.appendChild(p);
+    }
+
+    return measureContainer.scrollHeight / 10; // 返回单行高度
+  } catch (e) {
+    return null;
+  }
+}
 
 // ============================================================================
 // 解析相关
 // ============================================================================
 
-/**
- * 按自定义分页符 --- 将内容拆成多段
- */
 function splitByPageBreak(content: string): string[] {
   const trimmed = content.trim();
   if (!trimmed) return [""];
@@ -73,16 +120,12 @@ function splitByPageBreak(content: string): string[] {
   return segments.length > 0 ? segments : [""];
 }
 
-/**
- * Parse markdown content into blocks
- */
 export function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
   const lines = markdown.split("\n");
   const blocks: ContentBlock[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
-
     if (!trimmed) {
       blocks.push({ type: "empty", content: "" });
       continue;
@@ -140,15 +183,12 @@ interface RenderContext {
   fontSize: number;
   lineHeight: number;
   lineHeightRatio: number;
-  // 额外减少的高度（模板头部、cardFrame等）
   extraTopSpace: number;
-  // 内容宽度缩减（cardFrame 的 sideMargin）
   contentWidthReduction: number;
+  // 校准系数：从真实测量获得
+  calibrationFactor: number;
 }
 
-/**
- * 计算渲染上下文：基于用户选择的密度、字号和模板
- */
 function getRenderContext(options: PaginationOptions): RenderContext {
   const densityConfig = DENSITY_CONFIG[options.density];
   const fontSize = FONT_SIZE_CONFIG[options.fontSize];
@@ -158,21 +198,18 @@ function getRenderContext(options: PaginationOptions): RenderContext {
   let extraTopSpace = 0;
   let contentWidthReduction = 0;
 
-  // appleNotes 布局有头部
   if (template.layout === "appleNotes") {
     extraTopSpace += TEMPLATE_EXTRA_HEIGHT.appleNotesHeader;
   }
 
-  // cardFrame 有顶线和上边距
   if (template.cardFrame?.topLine) {
     extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopLine;
     extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopMargin;
-    // cardFrame 有左右边距百分比
     const sideMarginPercent = template.cardFrame.sideMarginPercent || 0;
     contentWidthReduction = (CARD_CONFIG.width * sideMarginPercent * 2) / 100;
   }
 
-  return {
+  const context: RenderContext = {
     cardWidth: CARD_CONFIG.width,
     cardHeight: CARD_CONFIG.height,
     padding: densityConfig.padding,
@@ -181,103 +218,97 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     lineHeightRatio: densityConfig.lineHeightRatio,
     extraTopSpace,
     contentWidthReduction,
+    calibrationFactor: 1.0, // 默认值
   };
+
+  // 用真实测量校准
+  const realHeight = getRealTextHeight(densityConfig.padding, fontSize, densityConfig.lineHeightRatio);
+  if (realHeight) {
+    const estimatedHeight = lineHeight + fontSize * 0.5;
+    context.calibrationFactor = realHeight / estimatedHeight;
+    // 限制校准系数在合理范围 [0.8, 1.3]
+    context.calibrationFactor = Math.max(0.8, Math.min(1.3, context.calibrationFactor));
+  }
+
+  return context;
 }
 
-/**
- * 计算可用内容高度
- */
 function getAvailableContentHeight(context: RenderContext): number {
   return context.cardHeight - context.padding * 2 - context.extraTopSpace;
 }
 
-/**
- * 精确估算块的高度（像素）
- * 极度保守，确保不溢出
- */
 function estimateBlockHeight(
   block: ContentBlock,
   context: RenderContext
 ): number {
-  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction } = context;
+  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction, calibrationFactor } = context;
 
-  // 可用内容宽度（考虑 cardFrame 的左右边距）
   const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
-
-  // 保守估算字符宽度（按较大值计算）
-  const avgCharWidth = fontSize * 0.65; // 略大的值，更保守
+  const avgCharWidth = fontSize * 0.65;
   const charsPerLine = Math.floor(contentWidth / avgCharWidth);
+
+  let estimatedHeight = 0;
 
   switch (block.type) {
     case "heading": {
       const level = block.level || 1;
-      // 标题字号更大
       const headingFontSize = fontSize * (level === 1 ? 2 : level === 2 ? 1.75 : 1.5);
       const headingLineHeight = headingFontSize * lineHeightRatio;
-
-      // 估算标题换行（保守估计）
       const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.65));
       const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));
-
-      // 标题上下边距（保守估计）
       const marginBottom = fontSize;
       const marginTop = level === 1 ? fontSize * 0.5 : fontSize * 1.2;
-
-      return headingLineHeight * lines + marginBottom + marginTop;
+      estimatedHeight = headingLineHeight * lines + marginBottom + marginTop;
+      break;
     }
 
     case "paragraph": {
       const lines = block.content.split("\n");
       let totalHeight = 0;
-
       for (const line of lines) {
         if (!line.trim()) {
           totalHeight += lineHeight;
         } else {
-          // 保守估算换行
           const textLines = Math.max(1, Math.ceil(line.length / charsPerLine));
           totalHeight += lineHeight * textLines;
         }
       }
-
-      // 段落下边距（保守）
-      return totalHeight + fontSize * 0.75;
+      estimatedHeight = totalHeight + fontSize * 0.75;
+      break;
     }
 
     case "list": {
-      // 列表有左边距
-      const listContentWidth = contentWidth - 28; // 略大的左边距
+      const listContentWidth = contentWidth - 28;
       const listCharsPerLine = Math.floor(listContentWidth / avgCharWidth);
       const lines = Math.max(1, Math.ceil(block.content.length / listCharsPerLine));
-
-      // 列表项间距（保守）
-      return lineHeight * lines + fontSize * 0.5;
+      estimatedHeight = lineHeight * lines + fontSize * 0.5;
+      break;
     }
 
     case "code": {
-      // 代码块用等宽字体，行高略小（保守估计）
       const codeLineHeight = fontSize * 1.5;
       const lines = block.content.split("\n").length;
-      return codeLineHeight * lines + fontSize * 0.75;
+      estimatedHeight = codeLineHeight * lines + fontSize * 0.75;
+      break;
     }
 
     case "empty": {
-      return lineHeight;
+      estimatedHeight = lineHeight;
+      break;
     }
 
     default:
-      return lineHeight;
+      estimatedHeight = lineHeight;
   }
+
+  // 应用校准系数
+  return estimatedHeight * calibrationFactor;
 }
 
 // ============================================================================
 // 分页算法
 // ============================================================================
 
-/**
- * 将超高的块拆分成多个可放入单页的块
- * 极度保守的拆分策略
- */
 function splitOversizedBlock(
   block: ContentBlock,
   maxAvailableHeight: number,
@@ -289,7 +320,6 @@ function splitOversizedBlock(
     return [block];
   }
 
-  // 只拆分段落和列表
   if (block.type !== "paragraph" && block.type !== "list") {
     return [block];
   }
@@ -302,8 +332,7 @@ function splitOversizedBlock(
   const content = block.content;
   const chunks: ContentBlock[] = [];
 
-  // 极度保守：每页只放 60% 的理论容量
-  const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * 1.75));
+  const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * context.lineHeightRatio));
   const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.5);
 
   if (charsPerPage < 30) {
@@ -320,12 +349,10 @@ function splitOversizedBlock(
 
     let splitAt = charsPerPage;
 
-    // 优先在换行符处分割
     const nextNewLine = remaining.indexOf("\n", splitAt);
     if (nextNewLine > 0 && nextNewLine <= remaining.length * 0.85) {
       splitAt = nextNewLine + 1;
     } else {
-      // 在标点符号处分割
       const punctuation = /[。！？.!?，,；;]/;
       let found = false;
       for (let i = splitAt; i > splitAt - 100 && i > 0; i--) {
@@ -353,10 +380,6 @@ function splitOversizedBlock(
   return chunks.length > 0 ? chunks : [block];
 }
 
-/**
- * 基于高度的分页算法
- * 极度保守，确保不丢字
- */
 function calculatePagesByHeight(
   blocks: ContentBlock[],
   context: RenderContext
@@ -364,8 +387,8 @@ function calculatePagesByHeight(
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用 75% 的可用高度作为安全边距（从 70% 提高到 75%）
-  const safeAvailableHeight = availableHeight * 0.75;
+  // 使用 72% 的可用高度（经过校准后可以更精确）
+  const safeAvailableHeight = availableHeight * 0.72;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
@@ -373,7 +396,6 @@ function calculatePagesByHeight(
   for (const block of blocks) {
     const blockHeight = estimateBlockHeight(block, context);
 
-    // 如果单个块就超过一页，需要拆分
     if (blockHeight > safeAvailableHeight) {
       if (currentPageBlocks.length > 0) {
         pages.push(currentPageBlocks);
@@ -397,9 +419,7 @@ function calculatePagesByHeight(
       continue;
     }
 
-    // 检查加入当前块是否会超出一页
     if (currentPageHeight + blockHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
-      // 标题特殊处理
       if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.4) {
         currentPageBlocks.push(block);
         currentPageHeight += blockHeight;
@@ -428,12 +448,6 @@ function calculatePagesByHeight(
 // 主入口
 // ============================================================================
 
-/**
- * 计算分页
- * @param markdown - Markdown 内容
- * @param options - 分页选项（密度、字号、主题）
- * @returns 分页后的 Markdown 字符串数组
- */
 export function calculatePages(
   markdown: string,
   options?: PaginationOptions | number
@@ -442,7 +456,6 @@ export function calculatePages(
     return [""];
   }
 
-  // 兼容旧调用
   let paginationOptions: PaginationOptions;
   if (typeof options === "number") {
     paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
@@ -465,4 +478,14 @@ export function calculatePages(
 
   const result = allPages.flat();
   return result.length > 0 ? result : [""];
+}
+
+/**
+ * 清理测量容器
+ */
+export function cleanupMeasureContainer(): void {
+  if (measureContainer && measureContainer.parentNode) {
+    measureContainer.parentNode.removeChild(measureContainer);
+  }
+  measureContainer = null;
 }
