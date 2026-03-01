@@ -42,7 +42,7 @@ export function ImagePreview() {
   const { theme, fontSize, density, alignment } = useContentThemeStore();
   const [currentPage, setCurrentPage] = useState(0);
   // 渲染时直接根据 content 计算页，避免 useEffect 滞后导致预览/导出页数不对
-  const pages = useMemo(() => calculatePages(content, EXPORT_CONFIG.maxCharsPerPage), [content]);
+  const pages = useMemo(() => calculatePages(content, { density, fontSize }), [content, density, fontSize]);
   const exportRefs = useRef<(HTMLElement | null)[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<PreviewViewMode>("pagination");

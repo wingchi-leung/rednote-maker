@@ -1,9 +1,12 @@
 /**
- * 基于实际渲染高度的智能分页算法
- * 彻底解决「字数估算导致内容溢出被裁掉」的问题
+ * 基于实际渲染参数的智能分页算法
+ * 根据用户选择的密度、字号等设置精确计算每页可容纳的内容
  */
 
 import { CARD_CONFIG } from "./constants";
+
+// 导出类型供外部使用
+export type { ContentBlock };
 
 /** 自定义分页符：文档中单独一行的 --- 会强制在此处分页 */
 export const PAGE_BREAK_SEPARATOR = "---";
@@ -14,10 +17,31 @@ interface ContentBlock {
   level?: number;
 }
 
-interface MeasuredBlock extends ContentBlock {
-  html: string;
-  estimatedHeight: number;
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+export type Density = "compact" | "comfortable" | "spacious";
+export type FontSize = "sm" | "md" | "lg";
+
+export interface PaginationOptions {
+  density: Density;
+  fontSize: FontSize;
 }
+
+// 密度配置：padding 和 lineHeight
+const DENSITY_CONFIG = {
+  compact: { padding: 24, lineHeightRatio: 1.5 },
+  comfortable: { padding: 32, lineHeightRatio: 1.75 },
+  spacious: { padding: 40, lineHeightRatio: 2.0 },
+} as const;
+
+// 字号配置：实际像素值
+const FONT_SIZE_CONFIG = {
+  sm: 14,
+  md: 16,
+  lg: 18,
+} as const;
 
 // ============================================================================
 // 解析相关
@@ -94,157 +118,177 @@ function blocksToMarkdown(blocks: ContentBlock[]): string {
 }
 
 // ============================================================================
-// 高度估算（用于初步分页）
+// 高度计算核心
 // ============================================================================
 
 /**
- * 估算块的高度（像素）
- * 基于标准的卡片宽度 (900px) 和默认样式
- * 这些值是根据实际渲染测量得出的保守估计
+ * 计算渲染上下文：基于用户选择的密度和字号
+ */
+function getRenderContext(options: PaginationOptions) {
+  const densityConfig = DENSITY_CONFIG[options.density];
+  const fontSize = FONT_SIZE_CONFIG[options.fontSize];
+  const lineHeight = fontSize * densityConfig.lineHeightRatio;
+
+  return {
+    cardWidth: CARD_CONFIG.width,
+    cardHeight: CARD_CONFIG.height,
+    padding: densityConfig.padding,
+    fontSize,
+    lineHeight,
+    lineHeightRatio: densityConfig.lineHeightRatio,
+  };
+}
+
+/**
+ * 计算可用内容高度（减去 padding 后）
+ */
+function getAvailableContentHeight(context: ReturnType<typeof getRenderContext>): number {
+  return context.cardHeight - context.padding * 2;
+}
+
+/**
+ * 精确估算块的高度（像素）
+ * 基于实际的字号、行高、padding设置
  */
 function estimateBlockHeight(
   block: ContentBlock,
-  cardWidth: number = CARD_CONFIG.width
+  context: ReturnType<typeof getRenderContext>
 ): number {
-  // 基础行高（基于默认 16px 字体，1.75 行高 = 28px）
-  const baseLineHeight = 28;
-  const horizontalPadding = 64; // 左右各 32px
+  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio } = context;
 
   // 可用内容宽度
-  const contentWidth = cardWidth - horizontalPadding;
-  // 每行约容纳字符数（中文按 1.2 倍宽度计算）
-  const charsPerLine = Math.floor(contentWidth / 14.4);
+  const contentWidth = cardWidth - padding * 2;
+
+  // 根据字号估算每行容纳字符数（中文按 1.2 倍宽度，英文按 0.6 倍）
+  const avgCharWidth = fontSize * 0.6; // 平均字符宽度
+  const charsPerLine = Math.floor(contentWidth / avgCharWidth);
 
   switch (block.type) {
     case "heading": {
       const level = block.level || 1;
-      // 标题行高：h1=48px, h2=40px, h3=32px
-      const headingLineHeight = level === 1 ? 48 : level === 2 ? 40 : 32;
-      // 标题可能换行
-      const lines = Math.ceil(block.content.length / charsPerLine);
-      // 标题下边距
-      const marginBottom = level === 1 ? 16 : level === 2 ? 12 : 8;
-      // 标题上边距（h1/h2）
-      const marginTop = level <= 2 ? (level === 1 ? 0 : 16) : 12;
+      // 标题字号更大：h1 = fontSize * 2, h2 = fontSize * 1.75, h3 = fontSize * 1.5
+      const headingFontSize = fontSize * (level === 1 ? 2 : level === 2 ? 1.75 : 1.5);
+      const headingLineHeight = headingFontSize * lineHeightRatio;
+
+      // 估算标题换行
+      const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.6));
+      const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));
+
+      // 标题上下边距
+      const marginBottom = fontSize * 0.75; // 下边距
+      const marginTop = level === 1 ? 0 : fontSize * 1; // h1 无上边距，其他有
+
       return headingLineHeight * lines + marginBottom + marginTop;
     }
 
     case "paragraph": {
       const lines = block.content.split("\n");
       let totalHeight = 0;
+
       for (const line of lines) {
         if (!line.trim()) {
-          totalHeight += baseLineHeight;
+          // 空行占一行
+          totalHeight += lineHeight;
         } else {
-          const textLines = Math.ceil(line.length / charsPerLine);
-          totalHeight += baseLineHeight * textLines;
+          // 估算这行文字会占用多少行
+          const textLines = Math.max(1, Math.ceil(line.length / charsPerLine));
+          totalHeight += lineHeight * textLines;
         }
       }
+
       // 段落下边距
-      return totalHeight + 8;
+      return totalHeight + fontSize * 0.5;
     }
 
     case "list": {
-      // 列表项左边距 + 项目符号
-      const effectiveWidth = contentWidth - 24;
-      const listCharsPerLine = Math.floor(effectiveWidth / 14.4);
-      const lines = Math.ceil(block.content.length / listCharsPerLine);
-      return baseLineHeight * lines + 4;
+      // 列表有左边距（约 24px）
+      const listContentWidth = contentWidth - 24;
+      const listCharsPerLine = Math.floor(listContentWidth / avgCharWidth);
+      const lines = Math.max(1, Math.ceil(block.content.length / listCharsPerLine));
+
+      // 列表项上下间距略小
+      return lineHeight * lines + fontSize * 0.25;
     }
 
     case "code": {
-      // 代码块用等宽字体，行高约 24px
-      const codeLineHeight = 24;
+      // 代码块用等宽字体，行高略小
+      const codeLineHeight = fontSize * 1.4;
       const lines = block.content.split("\n").length;
-      return codeLineHeight * lines + 8;
+      return codeLineHeight * lines + fontSize * 0.5;
     }
 
     case "empty": {
-      return baseLineHeight;
+      return lineHeight;
     }
 
     default:
-      return baseLineHeight;
+      return lineHeight;
   }
 }
 
 // ============================================================================
-// 分页算法核心
+// 分页算法
 // ============================================================================
-
-interface PageLayoutContext {
-  cardWidth: number;
-  cardHeight: number;
-  padding: number;
-  lineHeight: number;
-}
-
-/**
- * 计算单页可用的内容高度
- */
-function getAvailableContentHeight(context: PageLayoutContext): number {
-  return context.cardHeight - context.padding * 2;
-}
 
 /**
  * 将超高的块拆分成多个可放入单页的块
- * 主要处理超长段落
+ * 只拆分段落和列表
  */
 function splitOversizedBlock(
   block: ContentBlock,
   maxAvailableHeight: number,
-  context: PageLayoutContext
+  context: ReturnType<typeof getRenderContext>
 ): ContentBlock[] {
-  const blockHeight = estimateBlockHeight(block, context.cardWidth);
+  const blockHeight = estimateBlockHeight(block, context);
 
   if (blockHeight <= maxAvailableHeight) {
     return [block];
   }
 
-  // 只拆分段落和列表，其他类型不拆（避免破坏结构）
+  // 只拆分段落和列表
   if (block.type !== "paragraph" && block.type !== "list") {
+    // 其他类型如果太高，就让它独占一页（可能会有溢出，但比强行拆分好）
     return [block];
   }
 
-  const chunks: ContentBlock[] = [];
+  const { cardWidth, padding, fontSize } = context;
+  const contentWidth = cardWidth - padding * 2;
+  const avgCharWidth = fontSize * 0.6;
+  const charsPerLine = Math.floor(contentWidth / avgCharWidth);
+
   const content = block.content;
-  const horizontalPadding = 64;
-  const contentWidth = context.cardWidth - horizontalPadding;
-  const charsPerLine = Math.floor(contentWidth / 14.4);
-  const baseLineHeight = context.lineHeight;
+  const chunks: ContentBlock[] = [];
 
-  // 估算每行可容纳的字符数对应的高度
-  const estimatedLinesForFullContent = Math.ceil(content.length / charsPerLine);
-  const estimatedHeight = estimatedLinesForFullContent * baseLineHeight;
+  // 计算每页大概能放多少字符
+  // 高度 ÷ 行高 = 可用行数
+  const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * 1.75));
+  // 每行字符数 × 行数 = 每页字符数（保守估计，乘以 0.8）
+  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.7);
 
-  // 计算需要拆分成多少段
-  const numChunks = Math.ceil(estimatedHeight / maxAvailableHeight) + 1;
-  const charsPerChunk = Math.max(50, Math.floor(content.length / numChunks));
+  if (charsPerPage < 50) {
+    // 太小了，不拆分
+    return [block];
+  }
 
   let remaining = content;
-  let chunkNum = 0;
 
   while (remaining.length > 0) {
-    chunkNum++;
-
-    // 最后一个块或剩余内容较少时，全部放入
-    if (remaining.length <= charsPerChunk) {
+    if (remaining.length <= charsPerPage) {
       chunks.push({ ...block, content: remaining });
       break;
     }
 
-    // 寻找合适的分割点
-    let splitAt = charsPerChunk;
+    let splitAt = charsPerPage;
 
     // 优先在换行符处分割
     const nextNewLine = remaining.indexOf("\n", splitAt);
     if (nextNewLine > 0 && nextNewLine <= remaining.length * 0.9) {
       splitAt = nextNewLine + 1;
     } else {
-      // 其次在句号、问号、感叹号处分割
-      const punctuation = /[。！？.!?]/;
+      // 在标点符号处分割
+      const punctuation = /[。！？.!?，,；;]/;
       let found = false;
-      for (let i = splitAt; i > splitAt - 50 && i > 0; i--) {
+      for (let i = splitAt; i > splitAt - 80 && i > 0; i--) {
         if (punctuation.test(remaining[i])) {
           splitAt = i + 1;
           found = true;
@@ -271,24 +315,23 @@ function splitOversizedBlock(
 }
 
 /**
- * 基于高度估算的分页算法
- * 确保每页内容不会溢出卡片高度
+ * 基于高度的分页算法
  */
 function calculatePagesByHeight(
   blocks: ContentBlock[],
-  context: PageLayoutContext
+  context: ReturnType<typeof getRenderContext>
 ): ContentBlock[][] {
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用保守值：留 5% 的安全边距
-  const safeAvailableHeight = availableHeight * 0.95;
+  // 使用保守值：只使用 85% 的可用高度，留足够的安全边距
+  const safeAvailableHeight = availableHeight * 0.85;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
 
   for (const block of blocks) {
-    const blockHeight = estimateBlockHeight(block, context.cardWidth);
+    const blockHeight = estimateBlockHeight(block, context);
 
     // 如果单个块就超过一页，需要拆分
     if (blockHeight > safeAvailableHeight) {
@@ -300,14 +343,10 @@ function calculatePagesByHeight(
       }
 
       // 拆分超大块
-      const splitChunks = splitOversizedBlock(
-        block,
-        safeAvailableHeight,
-        context
-      );
+      const splitChunks = splitOversizedBlock(block, safeAvailableHeight, context);
 
       for (const chunk of splitChunks) {
-        const chunkHeight = estimateBlockHeight(chunk, context.cardWidth);
+        const chunkHeight = estimateBlockHeight(chunk, context);
         if (currentPageHeight + chunkHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
           pages.push(currentPageBlocks);
           currentPageBlocks = [chunk];
@@ -322,11 +361,11 @@ function calculatePagesByHeight(
 
     // 检查加入当前块是否会超出一页
     if (currentPageHeight + blockHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
-      // 标题特殊处理：如果当前页不满且这是标题，尝试放入
-      if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.6) {
+      // 标题特殊处理
+      if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.5) {
         currentPageBlocks.push(block);
         currentPageHeight += blockHeight;
-      } else if (currentPageHeight < safeAvailableHeight * 0.2) {
+      } else if (currentPageHeight < safeAvailableHeight * 0.15) {
         // 当前页内容太少，强制放入
         currentPageBlocks.push(block);
         currentPageHeight += blockHeight;
@@ -350,18 +389,32 @@ function calculatePagesByHeight(
   return pages;
 }
 
+// ============================================================================
+// 主入口
+// ============================================================================
+
 /**
- * 主入口：计算分页
+ * 计算分页
  * @param markdown - Markdown 内容
- * @param cardHeight - 卡片高度（像素），默认使用 CARD_CONFIG.height
+ * @param options - 分页选项（密度、字号）
  * @returns 分页后的 Markdown 字符串数组
  */
 export function calculatePages(
   markdown: string,
-  maxCharsPerPage?: number // 保留参数兼容性，但不再使用
+  options?: PaginationOptions | number
 ): string[] {
   if (!markdown.trim()) {
     return [""];
+  }
+
+  // 兼容旧调用：如果传入的是 number，使用默认值
+  let paginationOptions: PaginationOptions;
+  if (typeof options === "number") {
+    paginationOptions = { density: "comfortable", fontSize: "md" };
+  } else if (!options) {
+    paginationOptions = { density: "comfortable", fontSize: "md" };
+  } else {
+    paginationOptions = options;
   }
 
   // 按自定义分页符分段
@@ -369,18 +422,12 @@ export function calculatePages(
 
   const allPages: string[][] = [];
 
+  // 获取渲染上下文
+  const context = getRenderContext(paginationOptions);
+
   for (const segment of segments) {
     const blocks = parseMarkdownToBlocks(segment);
-
-    const context: PageLayoutContext = {
-      cardWidth: CARD_CONFIG.width,
-      cardHeight: CARD_CONFIG.height,
-      padding: 32, // 默认 padding
-      lineHeight: 28, // 默认行高 16px * 1.75
-    };
-
     const pageBlocks = calculatePagesByHeight(blocks, context);
-
     const pageStrings = pageBlocks.map((blocks) => blocksToMarkdown(blocks));
     allPages.push(pageStrings);
   }
@@ -388,6 +435,3 @@ export function calculatePages(
   const result = allPages.flat();
   return result.length > 0 ? result : [""];
 }
-
-// 保留导出供其他模块使用
-export { estimateBlockHeight, type ContentBlock };

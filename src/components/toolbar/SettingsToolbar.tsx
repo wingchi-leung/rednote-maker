@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   themeColors,
   useContentThemeStore,
@@ -12,7 +12,6 @@ import {
 import { themeLabels, THEME_IDS } from "@/lib/templates";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { calculatePages } from "@/lib/pagination";
-import { EXPORT_CONFIG } from "@/lib/constants";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
 
 const fontSizeLabels: Record<FontSize, string> = {
@@ -43,7 +42,7 @@ export function SettingsToolbar() {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
-  const pages = calculatePages(content, EXPORT_CONFIG.maxCharsPerPage);
+  const pages = useMemo(() => calculatePages(content, { density, fontSize }), [content, density, fontSize]);
   const totalPages = pages.length;
 
   // 同步：当页数变化时，默认全选
