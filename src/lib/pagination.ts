@@ -1,26 +1,20 @@
-/**
- * 基于数学估算 + 真实DOM测量的混合分页算法
- * 用真实测量校准估算系数，解决丢字问题
- */
-
+import React from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
+import { renderToStaticMarkup } from "react-dom/server";
 import { CARD_CONFIG } from "./constants";
 import { getTemplate, type Theme } from "./templates";
 
-// 导出类型供外部使用
 export type { ContentBlock };
 
 /** 自定义分页符：文档中单独一行的 --- 会强制在此处分页 */
 export const PAGE_BREAK_SEPARATOR = "---";
 
 interface ContentBlock {
-  type: "heading" | "paragraph" | "list" | "code" | "empty";
+  type: "line";
   content: string;
-  level?: number;
 }
-
-// ============================================================================
-// 类型定义
-// ============================================================================
 
 export type Density = "compact" | "comfortable" | "spacious";
 export type FontSize = "sm" | "md" | "lg";
@@ -31,83 +25,43 @@ export interface PaginationOptions {
   theme: Theme;
 }
 
-// 密度配置：padding 和 lineHeight
 const DENSITY_CONFIG = {
   compact: { padding: 24, lineHeightRatio: 1.5 },
   comfortable: { padding: 32, lineHeightRatio: 1.75 },
   spacious: { padding: 40, lineHeightRatio: 2.0 },
 } as const;
 
-// 字号配置：实际像素值
 const FONT_SIZE_CONFIG = {
   sm: 14,
   md: 16,
   lg: 18,
 } as const;
 
-// 模板额外高度配置（像素）
-const TEMPLATE_EXTRA_HEIGHT = {
-  appleNotesHeader: 50,
-  cardFrameTopMargin: 24,
-  cardFrameTopLine: 1,
+const TEMPLATE_EXTRA = {
+  appleHeader: 50,
+  frameTopLine: 1,
+  frameTopMargin: 24,
 } as const;
 
-// ============================================================================
-// 真实DOM测量（用于校准）
-// ============================================================================
-
-const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
-
-let measureContainer: HTMLElement | null = null;
-
-/**
- * 用真实DOM测量一段简单文本的实际高度
- * 用于校准估算值
- */
-function getRealTextHeight(
-  padding: number,
-  fontSize: number,
-  lineHeightRatio: number
-): number | null {
-  if (!isBrowser) return null;
-
-  try {
-    if (!measureContainer) {
-      measureContainer = document.createElement("div");
-      measureContainer.style.position = "absolute";
-      measureContainer.style.visibility = "hidden";
-      measureContainer.style.pointerEvents = "none";
-      measureContainer.style.top = "0";
-      measureContainer.style.left = "0";
-      measureContainer.style.width = `${CARD_CONFIG.width}px`;
-      measureContainer.style.padding = `${padding}px`;
-      measureContainer.style.boxSizing = "border-box";
-      measureContainer.style.fontSize = `${fontSize}px`;
-      measureContainer.style.lineHeight = lineHeightRatio.toString();
-      measureContainer.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      measureContainer.style.overflow = "hidden";
-      measureContainer.style.wordBreak = "break-word";
-      document.body.appendChild(measureContainer);
-    }
-
-    // 测量10行普通文本的高度
-    measureContainer.innerHTML = "";
-    for (let i = 0; i < 10; i++) {
-      const p = document.createElement("p");
-      p.style.margin = "0 0 " + (fontSize * 0.5) + "px 0";
-      p.textContent = "这是一行测试文字用于测量实际渲染高度";
-      measureContainer.appendChild(p);
-    }
-
-    return measureContainer.scrollHeight / 10; // 返回单行高度
-  } catch (e) {
-    return null;
-  }
+interface RenderContext {
+  fontSize: number;
+  lineHeightRatio: number;
+  contentWidth: number;
+  contentHeight: number;
 }
 
-// ============================================================================
-// 解析相关
-// ============================================================================
+const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
+let measureContainer: HTMLDivElement | null = null;
+const HEIGHT_SAFETY_GAP = 6;
+
+function preprocessHighlight(md: string): string {
+  const parts = md.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part, i) =>
+      i % 2 === 0 ? part.replace(/==([^=]+?)==/g, "<mark>$1</mark>") : part
+    )
+    .join("");
+}
 
 function splitByPageBreak(content: string): string[] {
   const trimmed = content.trim();
@@ -116,368 +70,473 @@ function splitByPageBreak(content: string): string[] {
     `\\n\\s*${PAGE_BREAK_SEPARATOR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n`,
     "g"
   );
-  const segments = trimmed.split(re).map((s) => s.trim()).filter(Boolean);
+  const segments = trimmed
+    .split(re)
+    .map((s) => s.trim())
+    .filter(Boolean);
   return segments.length > 0 ? segments : [""];
 }
 
 export function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
-  const lines = markdown.split("\n");
-  const blocks: ContentBlock[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      blocks.push({ type: "empty", content: "" });
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      blocks.push({
-        type: "heading",
-        content: headingMatch[2],
-        level: headingMatch[1].length,
-      });
-      continue;
-    }
-
-    if (trimmed.startsWith("```")) {
-      blocks.push({ type: "code", content: trimmed });
-      continue;
-    }
-
-    if (/^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed)) {
-      blocks.push({ type: "list", content: trimmed });
-      continue;
-    }
-
-    blocks.push({ type: "paragraph", content: line });
-  }
-
-  return blocks;
-}
-
-function isOrderedListItem(content: string): boolean {
-  return /^\d+\.\s/.test(content);
-}
-
-function isUnorderedListItem(content: string): boolean {
-  return /^[-*+]\s/.test(content);
-}
-
-function blocksToMarkdown(blocks: ContentBlock[]): string {
-  return blocks
-    .map((block, index) => {
-      switch (block.type) {
-        case "heading":
-          return `${"#".repeat(block.level || 1)} ${block.content}`;
-        case "empty":
-          return "";
-        case "list": {
-          const prev = index > 0 ? blocks[index - 1] : null;
-          const prevWasOrdered = prev?.type === "list" && prev.content && isOrderedListItem(prev.content);
-          const currentUnordered = isUnorderedListItem(block.content);
-          if (currentUnordered && prevWasOrdered) {
-            return "  " + block.content;
-          }
-          return block.content;
-        }
-        default:
-          return block.content;
-      }
-    })
-    .join("\n");
-}
-
-// ============================================================================
-// 高度计算核心
-// ============================================================================
-
-interface RenderContext {
-  cardWidth: number;
-  cardHeight: number;
-  padding: number;
-  fontSize: number;
-  lineHeight: number;
-  lineHeightRatio: number;
-  extraTopSpace: number;
-  contentWidthReduction: number;
-  // 校准系数：从真实测量获得
-  calibrationFactor: number;
-  // 模板配置
-  template: ReturnType<typeof getTemplate>;
+  return markdown.split("\n").map((line) => ({ type: "line", content: line }));
 }
 
 function getRenderContext(options: PaginationOptions): RenderContext {
-  const densityConfig = DENSITY_CONFIG[options.density];
-  const fontSize = FONT_SIZE_CONFIG[options.fontSize];
-  const lineHeight = fontSize * densityConfig.lineHeightRatio;
+  const density = DENSITY_CONFIG[options.density];
   const template = getTemplate(options.theme);
+  const fontSize = FONT_SIZE_CONFIG[options.fontSize];
 
-  let extraTopSpace = 0;
-  let contentWidthReduction = 0;
+  let contentWidth = CARD_CONFIG.width - density.padding * 2;
+  let contentHeight = CARD_CONFIG.height - density.padding * 2;
 
   if (template.layout === "appleNotes") {
-    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.appleNotesHeader;
+    contentHeight -= TEMPLATE_EXTRA.appleHeader;
   }
 
   if (template.cardFrame?.topLine) {
-    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopLine;
-    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopMargin;
-    const sideMarginPercent = template.cardFrame.sideMarginPercent || 0;
-    contentWidthReduction = (CARD_CONFIG.width * sideMarginPercent * 2) / 100;
+    const sideMarginPx = (CARD_CONFIG.width * template.cardFrame.sideMarginPercent) / 100;
+    contentWidth -= sideMarginPx * 2;
+    contentHeight -= TEMPLATE_EXTRA.frameTopLine + TEMPLATE_EXTRA.frameTopMargin;
   }
 
-  const context: RenderContext = {
-    cardWidth: CARD_CONFIG.width,
-    cardHeight: CARD_CONFIG.height,
-    padding: densityConfig.padding,
+  return {
     fontSize,
-    lineHeight,
-    lineHeightRatio: densityConfig.lineHeightRatio,
-    extraTopSpace,
-    contentWidthReduction,
-    calibrationFactor: 1.0, // 默认值
-    template,
+    lineHeightRatio: density.lineHeightRatio,
+    contentWidth: Math.max(120, Math.floor(contentWidth)),
+    contentHeight: Math.max(120, Math.floor(contentHeight)),
   };
+}
 
-  // 用真实测量校准
-  const realHeight = getRealTextHeight(densityConfig.padding, fontSize, densityConfig.lineHeightRatio);
-  if (realHeight) {
-    const estimatedHeight = lineHeight + fontSize * 0.5;
-    context.calibrationFactor = realHeight / estimatedHeight;
-    // 限制校准系数在合理范围 [0.8, 1.3]
-    context.calibrationFactor = Math.max(0.8, Math.min(1.3, context.calibrationFactor));
+function getMeasureContainer(): HTMLDivElement | null {
+  if (!isBrowser) return null;
+  if (measureContainer) return measureContainer;
+
+  const el = document.createElement("div");
+  el.style.position = "fixed";
+  el.style.left = "-99999px";
+  el.style.top = "-99999px";
+  el.style.visibility = "hidden";
+  el.style.pointerEvents = "none";
+  el.style.overflow = "visible";
+  el.style.boxSizing = "border-box";
+  el.style.wordBreak = "break-word";
+  el.style.overflowWrap = "break-word";
+  el.style.fontFamily =
+    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  document.body.appendChild(el);
+  measureContainer = el;
+  return el;
+}
+
+function createMeasureComponents() {
+  return {
+    h1: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h1",
+        {
+          style: {
+            fontSize: "30px",
+            lineHeight: "36px",
+            fontWeight: 700,
+            marginTop: 0,
+            marginBottom: 8,
+          },
+        },
+        children
+      ),
+    h2: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h2",
+        {
+          style: {
+            fontSize: "24px",
+            lineHeight: "32px",
+            fontWeight: 700,
+            marginTop: 16,
+            marginBottom: 8,
+          },
+        },
+        children
+      ),
+    h3: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h3",
+        {
+          style: {
+            fontSize: "20px",
+            lineHeight: "28px",
+            fontWeight: 700,
+            marginTop: 12,
+            marginBottom: 6,
+          },
+        },
+        children
+      ),
+    h4: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h4",
+        {
+          style: {
+            fontSize: "18px",
+            lineHeight: "28px",
+            fontWeight: 700,
+            marginTop: 8,
+            marginBottom: 4,
+          },
+        },
+        children
+      ),
+    h5: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h5",
+        {
+          style: {
+            fontSize: "16px",
+            lineHeight: "24px",
+            fontWeight: 700,
+            marginTop: 8,
+            marginBottom: 4,
+          },
+        },
+        children
+      ),
+    h6: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "h6",
+        {
+          style: {
+            fontSize: "14px",
+            lineHeight: "20px",
+            fontWeight: 700,
+            marginTop: 6,
+            marginBottom: 2,
+          },
+        },
+        children
+      ),
+    p: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "p",
+        {
+          style: {
+            marginTop: 0,
+            marginBottom: 8,
+          },
+        },
+        children
+      ),
+    ul: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "ul",
+        {
+          style: {
+            marginTop: 0,
+            marginBottom: 8,
+            paddingLeft: 24,
+          },
+        },
+        children
+      ),
+    ol: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "ol",
+        {
+          style: {
+            marginTop: 0,
+            marginBottom: 8,
+            paddingLeft: 24,
+          },
+        },
+        children
+      ),
+    li: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "li",
+        {
+          style: {
+            marginTop: 0,
+            marginBottom: 2,
+          },
+        },
+        children
+      ),
+    blockquote: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "blockquote",
+        {
+          style: {
+            marginTop: 8,
+            marginBottom: 8,
+            paddingTop: 4,
+            paddingBottom: 4,
+            paddingLeft: 12,
+            borderLeft: "4px solid currentColor",
+            fontStyle: "italic",
+          },
+        },
+        children
+      ),
+    code: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "code",
+        {
+          style: {
+            padding: "2px 4px",
+            borderRadius: 4,
+          },
+        },
+        children
+      ),
+  };
+}
+
+const measureComponents = createMeasureComponents();
+
+function canFitMarkdown(markdown: string, context: RenderContext): boolean {
+  const el = getMeasureContainer();
+  if (!el) return false;
+
+  el.style.width = `${context.contentWidth}px`;
+  el.style.fontSize = `${context.fontSize}px`;
+  el.style.lineHeight = context.lineHeightRatio.toString();
+
+  const html = renderToStaticMarkup(
+    React.createElement(
+      ReactMarkdown,
+      {
+        remarkPlugins: [remarkGfm],
+        rehypePlugins: [rehypeRaw],
+        components: measureComponents,
+      },
+      preprocessHighlight(markdown || "*空页面*")
+    )
+  );
+
+  el.innerHTML = html;
+  const measuredHeight = Math.ceil(el.scrollHeight);
+  return measuredHeight <= context.contentHeight - HEIGHT_SAFETY_GAP;
+}
+
+function buildFenceState(lines: string[]): boolean[] {
+  const inFenceAtSplit: boolean[] = new Array(lines.length + 1).fill(false);
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*```/.test(lines[i])) {
+      inFence = !inFence;
+    }
+    inFenceAtSplit[i + 1] = inFence;
+  }
+  return inFenceAtSplit;
+}
+
+function isNaturalBoundary(lines: string[], splitIndex: number): boolean {
+  if (splitIndex <= 0 || splitIndex >= lines.length) return true;
+  const prev = lines[splitIndex - 1].trim();
+  const next = lines[splitIndex].trim();
+  if (!prev || !next) return true;
+  if (next.startsWith("#")) return true;
+  if (/^[-*+]\s/.test(next) || /^\d+\.\s/.test(next)) return true;
+  return false;
+}
+
+function pickSafeSplitIndex(lines: string[], bestFit: number): number {
+  if (bestFit <= 1) return 1;
+  const fenceState = buildFenceState(lines);
+
+  for (let i = bestFit; i >= 1; i--) {
+    if (fenceState[i]) continue;
+    if (isNaturalBoundary(lines, i)) return i;
   }
 
-  return context;
+  for (let i = bestFit; i >= 1; i--) {
+    if (!fenceState[i]) return i;
+  }
+
+  return 1;
 }
 
-function getAvailableContentHeight(context: RenderContext): number {
-  return context.cardHeight - context.padding * 2 - context.extraTopSpace;
+function pickInlineSplitAt(line: string, best: number): number {
+  const minKeep = Math.min(20, line.length);
+  for (let i = best; i >= minKeep; i--) {
+    const ch = line[i - 1];
+    if (/[。！？.!?，,；;、\s]/.test(ch)) {
+      return i;
+    }
+  }
+  return Math.max(1, best);
 }
 
-function estimateBlockHeight(
-  block: ContentBlock,
+function splitSingleOverlongLine(
+  line: string,
   context: RenderContext
-): number {
-  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction, calibrationFactor } = context;
-
-  const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
-  const avgCharWidth = fontSize * 0.65;
-  const charsPerLine = Math.floor(contentWidth / avgCharWidth);
-
-  let estimatedHeight = 0;
-
-  switch (block.type) {
-    case "heading": {
-      const level = block.level || 1;
-      const headingMultiplier =
-        level === 1 ? 2 : level === 2 ? 1.75 : level === 3 ? 1.5 : level === 4 ? 1.35 : level === 5 ? 1.2 : 1.1;
-      const headingFontSize = fontSize * headingMultiplier;
-      const headingLineHeight = headingFontSize * lineHeightRatio;
-      const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.65));
-      const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));
-      const marginBottom = fontSize;
-      const marginTop = level === 1 ? fontSize * 0.5 : fontSize * 1.2;
-      estimatedHeight = headingLineHeight * lines + marginBottom + marginTop;
-      break;
-    }
-
-    case "paragraph": {
-      const lines = block.content.split("\n");
-      let totalHeight = 0;
-      for (const line of lines) {
-        if (!line.trim()) {
-          totalHeight += lineHeight;
-        } else {
-          const textLines = Math.max(1, Math.ceil(line.length / charsPerLine));
-          totalHeight += lineHeight * textLines;
-        }
-      }
-      estimatedHeight = totalHeight + fontSize * 0.9;
-      break;
-    }
-
-    case "list": {
-      const listContentWidth = contentWidth - 28;
-      const listCharsPerLine = Math.floor(listContentWidth / avgCharWidth);
-      const lines = Math.max(1, Math.ceil(block.content.length / listCharsPerLine));
-      estimatedHeight = lineHeight * lines + fontSize * 0.5;
-      break;
-    }
-
-    case "code": {
-      const codeLineHeight = fontSize * 1.5;
-      const lines = block.content.split("\n").length;
-      estimatedHeight = codeLineHeight * lines + fontSize * 0.9;
-      break;
-    }
-
-    case "empty": {
-      estimatedHeight = lineHeight;
-      break;
-    }
-
-    default:
-      estimatedHeight = lineHeight;
+): { head: string; tail: string } {
+  if (!line) {
+    return { head: "", tail: "" };
   }
 
-  // 应用校准系数
-  return estimatedHeight * calibrationFactor;
-}
+  let lo = 1;
+  let hi = line.length;
+  let best = 1;
 
-// ============================================================================
-// 分页算法
-// ============================================================================
-
-function splitOversizedBlock(
-  block: ContentBlock,
-  maxAvailableHeight: number,
-  context: RenderContext
-): ContentBlock[] {
-  const blockHeight = estimateBlockHeight(block, context);
-
-  if (blockHeight <= maxAvailableHeight) {
-    return [block];
-  }
-
-  if (block.type !== "paragraph" && block.type !== "list") {
-    return [block];
-  }
-
-  const { cardWidth, padding, fontSize, contentWidthReduction } = context;
-  const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
-  const avgCharWidth = fontSize * 0.65;
-  const charsPerLine = Math.floor(contentWidth / avgCharWidth);
-
-  const content = block.content;
-  const chunks: ContentBlock[] = [];
-
-  const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * context.lineHeightRatio));
-  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.75);
-
-  if (charsPerPage < 30) {
-    return [block];
-  }
-
-  let remaining = content;
-
-  while (remaining.length > 0) {
-    if (remaining.length <= charsPerPage) {
-      chunks.push({ ...block, content: remaining });
-      break;
-    }
-
-    let splitAt = charsPerPage;
-
-    const nextNewLine = remaining.indexOf("\n", splitAt);
-    if (nextNewLine > 0 && nextNewLine <= remaining.length * 0.85) {
-      splitAt = nextNewLine + 1;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const candidate = line.slice(0, mid);
+    if (canFitMarkdown(candidate, context)) {
+      best = mid;
+      lo = mid + 1;
     } else {
-      const punctuation = /[。！？.!?，,；;]/;
-      let found = false;
-      for (let i = splitAt; i > splitAt - 100 && i > 0; i--) {
-        if (punctuation.test(remaining[i])) {
-          splitAt = i + 1;
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        const space = remaining.lastIndexOf(" ", splitAt);
-        if (space > splitAt / 2) {
-          splitAt = space + 1;
-        }
-      }
+      hi = mid - 1;
     }
-
-    const chunk = remaining.slice(0, splitAt).trim();
-    if (chunk) {
-      chunks.push({ ...block, content: chunk });
-    }
-    remaining = remaining.slice(splitAt).trimStart();
   }
 
-  return chunks.length > 0 ? chunks : [block];
+  const splitAt = pickInlineSplitAt(line, best);
+  const head = line.slice(0, splitAt).trimEnd();
+  const tail = line.slice(splitAt).trimStart();
+
+  if (!head && tail) {
+    return { head: line[0], tail: line.slice(1).trimStart() };
+  }
+
+  return { head, tail };
 }
 
-function calculatePagesByHeight(
-  blocks: ContentBlock[],
+function paginateSegmentByMeasurement(
+  segment: string,
   context: RenderContext
-): ContentBlock[][] {
-  const pages: ContentBlock[][] = [];
-  const availableHeight = getAvailableContentHeight(context);
+): string[] {
+  const pages: string[] = [];
+  let lines = segment.split("\n");
 
-  // 根据模板类型调整安全边距
-  let safeMargin = 0.60; // 默认
-  if (context.template.id === "dark") {
-    safeMargin = 0.55; // dark 模板有 QuoteIcon 占用右上角空间
-  } else if (context.template.decoration === "sketch") {
-    safeMargin = 0.50; // sketch 模板有装饰占用空间，需要更保守
-  } else if (context.template.layout === "appleNotes") {
-    safeMargin = 0.58; // appleNotes 有头部，稍微保守一点
-  }
+  while (lines.length > 0) {
+    while (lines.length > 0 && !lines[0].trim()) {
+      lines = lines.slice(1);
+    }
+    if (lines.length === 0) break;
 
-  const safeAvailableHeight = availableHeight * safeMargin;
+    const full = lines.join("\n");
+    if (canFitMarkdown(full, context)) {
+      pages.push(full.trimEnd());
+      break;
+    }
 
-  let currentPageBlocks: ContentBlock[] = [];
-  let currentPageHeight = 0;
+    let lo = 1;
+    let hi = lines.length;
+    let bestFit = 0;
 
-  for (const block of blocks) {
-    const blockHeight = estimateBlockHeight(block, context);
-
-    if (blockHeight > safeAvailableHeight) {
-      if (currentPageBlocks.length > 0) {
-        pages.push(currentPageBlocks);
-        currentPageBlocks = [];
-        currentPageHeight = 0;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const candidate = lines.slice(0, mid).join("\n");
+      if (canFitMarkdown(candidate, context)) {
+        bestFit = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
       }
+    }
 
-      const splitChunks = splitOversizedBlock(block, safeAvailableHeight, context);
-
-      for (const chunk of splitChunks) {
-        const chunkHeight = estimateBlockHeight(chunk, context);
-        if (currentPageHeight + chunkHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
-          pages.push(currentPageBlocks);
-          currentPageBlocks = [chunk];
-          currentPageHeight = chunkHeight;
-        } else {
-          currentPageBlocks.push(chunk);
-          currentPageHeight += chunkHeight;
-        }
-      }
+    if (bestFit <= 0) {
+      const { head, tail } = splitSingleOverlongLine(lines[0], context);
+      pages.push(head || "");
+      lines = tail ? [tail, ...lines.slice(1)] : lines.slice(1);
       continue;
     }
 
-    if (currentPageHeight + blockHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
-      if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.4) {
-        currentPageBlocks.push(block);
-        currentPageHeight += blockHeight;
-      } else if (currentPageHeight < safeAvailableHeight * 0.1) {
-        currentPageBlocks.push(block);
-        currentPageHeight += blockHeight;
-      } else {
-        pages.push(currentPageBlocks);
-        currentPageBlocks = [block];
-        currentPageHeight = blockHeight;
-      }
+    const splitIndex = pickSafeSplitIndex(lines, bestFit);
+    const page = lines.slice(0, splitIndex).join("\n").trimEnd();
+    pages.push(page || "");
+    lines = lines.slice(splitIndex);
+  }
+
+  return pages.length > 0 ? pages : [""];
+}
+
+function paginateByCharacterFallback(segment: string): string[] {
+  const maxCharsPerPage = 900;
+  const lines = segment.split("\n");
+  const pages: string[] = [];
+  let bucket: string[] = [];
+  let size = 0;
+
+  for (const line of lines) {
+    const nextSize = size + line.length + 1;
+    if (nextSize > maxCharsPerPage && bucket.length > 0) {
+      pages.push(bucket.join("\n").trimEnd());
+      bucket = [line];
+      size = line.length + 1;
     } else {
-      currentPageBlocks.push(block);
-      currentPageHeight += blockHeight;
+      bucket.push(line);
+      size = nextSize;
     }
   }
 
-  if (currentPageBlocks.length > 0) {
-    pages.push(currentPageBlocks);
+  if (bucket.length > 0) {
+    pages.push(bucket.join("\n").trimEnd());
   }
 
-  return pages;
+  return pages.length > 0 ? pages : [""];
 }
 
-// ============================================================================
-// 主入口
-// ============================================================================
+function getTextBudget(options: PaginationOptions): number {
+  const base = 280;
+  const fontFactor = options.fontSize === "sm" ? 1.1 : options.fontSize === "lg" ? 0.85 : 1;
+  const densityFactor =
+    options.density === "compact" ? 1.1 : options.density === "spacious" ? 0.85 : 1;
+  return Math.max(180, Math.floor(base * fontFactor * densityFactor));
+}
+
+function weightedLength(text: string): number {
+  let total = 0;
+  for (const ch of text) {
+    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)) {
+      total += 1;
+    } else if (/\s/.test(ch)) {
+      total += 0.2;
+    } else {
+      total += 0.55;
+    }
+  }
+  return total;
+}
+
+function enforceTextBudgetForPage(page: string, budget: number): string[] {
+  if (weightedLength(page) <= budget) {
+    return [page];
+  }
+
+  const out: string[] = [];
+  let lines = page.split("\n");
+
+  while (lines.length > 0) {
+    let lo = 1;
+    let hi = lines.length;
+    let best = 1;
+
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const candidate = lines.slice(0, mid).join("\n");
+      if (weightedLength(candidate) <= budget) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    const split = pickSafeSplitIndex(lines, best);
+    out.push(lines.slice(0, split).join("\n").trimEnd());
+    lines = lines.slice(split);
+  }
+
+  return out.length > 0 ? out : [page];
+}
+
+function enforceTextBudget(pages: string[], budget: number): string[] {
+  const next: string[] = [];
+  for (const page of pages) {
+    next.push(...enforceTextBudgetForPage(page, budget));
+  }
+  return next.length > 0 ? next : [""];
+}
 
 export function calculatePages(
   markdown: string,
@@ -487,35 +546,29 @@ export function calculatePages(
     return [""];
   }
 
-  let paginationOptions: PaginationOptions;
-  if (typeof options === "number") {
-    paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
-  } else if (!options) {
-    paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
-  } else {
-    paginationOptions = options;
-  }
+  const paginationOptions: PaginationOptions =
+    typeof options === "number" || !options
+      ? { density: "comfortable", fontSize: "md", theme: "classic" }
+      : options;
 
   const segments = splitByPageBreak(markdown);
-  const allPages: string[][] = [];
   const context = getRenderContext(paginationOptions);
+  const budget = getTextBudget(paginationOptions);
+  const allPages: string[] = [];
 
   for (const segment of segments) {
-    const blocks = parseMarkdownToBlocks(segment);
-    const pageBlocks = calculatePagesByHeight(blocks, context);
-    const pageStrings = pageBlocks.map((blocks) => blocksToMarkdown(blocks));
-    allPages.push(pageStrings);
+    const rawPages = isBrowser
+      ? paginateSegmentByMeasurement(segment, context)
+      : paginateByCharacterFallback(segment);
+    const pages = enforceTextBudget(rawPages, budget);
+    allPages.push(...pages);
   }
 
-  const result = allPages.flat();
-  return result.length > 0 ? result : [""];
+  return allPages.length > 0 ? allPages : [""];
 }
 
-/**
- * 清理测量容器
- */
 export function cleanupMeasureContainer(): void {
-  if (measureContainer && measureContainer.parentNode) {
+  if (measureContainer?.parentNode) {
     measureContainer.parentNode.removeChild(measureContainer);
   }
   measureContainer = null;
