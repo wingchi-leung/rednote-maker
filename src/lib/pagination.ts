@@ -1,7 +1,21 @@
+/** 自定义分页符：文档中单独一行的 --- 会强制在此处分页 */
+export const PAGE_BREAK_SEPARATOR = "---";
+
 interface ContentBlock {
   type: "heading" | "paragraph" | "list" | "code" | "empty";
   content: string;
   level?: number;
+}
+
+/**
+ * 按自定义分页符 --- 将内容拆成多段（每段可再按字数/语义分页）
+ */
+function splitByPageBreak(content: string): string[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [""];
+  const re = new RegExp(`\\n\\s*${PAGE_BREAK_SEPARATOR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n`, "g");
+  const segments = trimmed.split(re).map((s) => s.trim()).filter(Boolean);
+  return segments.length > 0 ? segments : [""];
 }
 
 /**
@@ -69,13 +83,48 @@ export function estimateBlockChars(block: ContentBlock): number {
 }
 
 /**
- * Calculate pages for content with semantic-aware pagination
+ * 将超长块按字数拆成多段，避免单页内容溢出卡片
  */
-export function calculatePages(
-  markdown: string,
-  maxCharsPerPage: number = 1000
+function splitOversizedBlock(
+  block: ContentBlock,
+  maxCharsPerPage: number
 ): string[] {
-  const blocks = parseMarkdownToBlocks(markdown);
+  const blockChars = estimateBlockChars(block);
+  if (blockChars <= maxCharsPerPage) {
+    return [blocksToMarkdown([block])];
+  }
+  const content = block.type === "paragraph" || block.type === "list"
+    ? block.content
+    : blocksToMarkdown([block]);
+  const chunks: string[] = [];
+  let remaining = content;
+  const chunkSize = Math.max(100, maxCharsPerPage - 50);
+  while (remaining.length > 0) {
+    if (remaining.length <= maxCharsPerPage) {
+      chunks.push(remaining.trim());
+      break;
+    }
+    let splitAt = chunkSize;
+    const nextNewLine = remaining.indexOf("\n", chunkSize);
+    if (nextNewLine > 0 && nextNewLine < maxCharsPerPage) {
+      splitAt = nextNewLine + 1;
+    } else {
+      const space = remaining.lastIndexOf(" ", chunkSize);
+      if (space > chunkSize / 2) splitAt = space + 1;
+    }
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  return chunks.filter(Boolean);
+}
+
+/**
+ * 对单段内容按字数与语义计算分页（内部用，不处理 ---）
+ */
+function calculatePagesFromBlocks(
+  blocks: ContentBlock[],
+  maxCharsPerPage: number
+): string[] {
   const pages: string[] = [];
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageChars = 0;
@@ -83,25 +132,29 @@ export function calculatePages(
   for (const block of blocks) {
     const blockChars = estimateBlockChars(block);
 
-    // If adding this block would exceed the limit
+    if (blockChars > maxCharsPerPage) {
+      if (currentPageBlocks.length > 0) {
+        pages.push(blocksToMarkdown(currentPageBlocks));
+        currentPageBlocks = [];
+        currentPageChars = 0;
+      }
+      const chunkMarkdowns = splitOversizedBlock(block, maxCharsPerPage);
+      chunkMarkdowns.forEach((md) => pages.push(md));
+      continue;
+    }
+
     if (currentPageChars + blockChars > maxCharsPerPage && currentPageBlocks.length > 0) {
-      // Check if this is a heading - if so, try to keep it with the next page
       if (block.type === "heading" && currentPageChars < maxCharsPerPage * 0.7) {
-        // Add current page and start new one with heading
         pages.push(blocksToMarkdown(currentPageBlocks));
         currentPageBlocks = [block];
         currentPageChars = blockChars;
         continue;
       }
-
-      // If current page is too small, force add the block
       if (currentPageChars < maxCharsPerPage * 0.3) {
         currentPageBlocks.push(block);
         currentPageChars += blockChars;
         continue;
       }
-
-      // Finish current page and start new one
       pages.push(blocksToMarkdown(currentPageBlocks));
       currentPageBlocks = [block];
       currentPageChars = blockChars;
@@ -111,7 +164,6 @@ export function calculatePages(
     }
   }
 
-  // Add the last page if it has content
   if (currentPageBlocks.length > 0) {
     const remainingContent = blocksToMarkdown(currentPageBlocks);
     if (remainingContent.trim()) {
@@ -119,6 +171,20 @@ export function calculatePages(
     }
   }
 
+  return pages;
+}
+
+/**
+ * 计算分页：先按自定义分页符 --- 分段，每段再按字数与语义分页
+ */
+export function calculatePages(
+  markdown: string,
+  maxCharsPerPage: number = 1000
+): string[] {
+  const segments = splitByPageBreak(markdown);
+  const pages = segments.flatMap((seg) =>
+    calculatePagesFromBlocks(parseMarkdownToBlocks(seg), maxCharsPerPage)
+  );
   return pages.length > 0 ? pages : [""];
 }
 

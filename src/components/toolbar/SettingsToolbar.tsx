@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   themeColors,
   useContentThemeStore,
@@ -11,7 +11,6 @@ import {
 } from "@/store/useContentThemeStore";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { calculatePages } from "@/lib/pagination";
-import { CARD_CONFIG } from "@/lib/constants";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
 
 const themeLabels: Record<Theme, string> = {
@@ -45,17 +44,60 @@ export function SettingsToolbar() {
   const { content } = useMarkdownContentStore();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   const pages = calculatePages(content, 1000);
+  const totalPages = pages.length;
+
+  // 同步：当页数变化时，默认全选
+  useEffect(() => {
+    setSelectedIndices(Array.from({ length: totalPages }, (_, i) => i));
+  }, [totalPages]);
+
+  // 点击外部关闭下拉
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(e.target as Node)
+      ) {
+        setExportDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleIndex = (i: number) => {
+    setSelectedIndices((prev) =>
+      prev.includes(i)
+        ? prev.filter((x) => x !== i)
+        : [...prev, i].sort((a, b) => a - b)
+    );
+  };
+  const selectAll = () => {
+    setSelectedIndices(Array.from({ length: totalPages }, (_, i) => i));
+  };
+  const selectNone = () => {
+    setSelectedIndices([]);
+  };
+  const allSelected = selectedIndices.length === totalPages && totalPages > 0;
+  const noneSelected = selectedIndices.length === 0;
 
   const handleExport = () => {
-    if (pages.length === 0) return;
-
+    if (selectedIndices.length === 0) return;
+    setExportDropdownOpen(false);
     setIsExporting(true);
-    setExportProgress({ current: 0, total: pages.length });
-
+    setExportProgress({ current: 0, total: selectedIndices.length });
     const event = new CustomEvent("export-cards", {
-      detail: { pages, onProgress: setExportProgress, onComplete: () => setIsExporting(false) },
+      detail: {
+        pageIndices: selectedIndices,
+        totalPages,
+        onProgress: setExportProgress,
+        onComplete: () => setIsExporting(false),
+      },
     });
     window.dispatchEvent(event);
   };
@@ -185,22 +227,67 @@ export function SettingsToolbar() {
         </div>
       )}
 
-      {/* Export Button */}
-      <button
-        onClick={handleExport}
-        disabled={isExporting || pages.length === 0}
-        className={`
-          px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2
-          ${
-            isExporting || pages.length === 0
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : "bg-apple-blue text-white hover:bg-blue-600"
-          }
-        `}
-      >
-        <DownloadIcon />
-        {isExporting ? "导出中..." : "导出"}
-      </button>
+      {/* Export Dropdown */}
+      <div className="relative" ref={exportDropdownRef}>
+        <button
+          type="button"
+          onClick={() => pages.length > 0 && setExportDropdownOpen((o) => !o)}
+          disabled={isExporting || pages.length === 0}
+          className={`
+            px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2
+            ${
+              isExporting || pages.length === 0
+                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-apple-blue text-white hover:bg-blue-600"
+            }
+          `}
+        >
+          <DownloadIcon />
+          {isExporting ? "导出中..." : "导出"}
+        </button>
+        {exportDropdownOpen && pages.length > 0 && (
+          <div className="absolute right-0 top-full mt-1.5 z-50 w-52 rounded-xl border border-apple-border bg-white shadow-lg py-2">
+            <div className="px-3 pb-2 border-b border-gray-100">
+              <span className="text-xs font-medium text-gray-500">选择要导出的页</span>
+            </div>
+            <div className="max-h-44 overflow-y-auto py-1">
+              {pages.map((_, i) => (
+                <label
+                  key={i}
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIndices.includes(i)}
+                    onChange={() => toggleIndex(i)}
+                    className="rounded border-gray-300 text-apple-blue focus:ring-apple-blue"
+                  />
+                  第 {i + 1} 张
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-1 px-2 pt-1 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={allSelected ? selectNone : selectAll}
+                className="text-xs text-apple-blue hover:underline px-2 py-1"
+              >
+                {allSelected ? "取消全选" : "全选"}
+              </button>
+            </div>
+            <div className="px-2 pt-1">
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={selectedIndices.length === 0}
+                className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-apple-blue text-white hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                导出 {selectedIndices.length > 0 ? `(${selectedIndices.length} 张)` : ""}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

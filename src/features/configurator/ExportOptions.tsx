@@ -13,23 +13,18 @@ export function ExportOptions() {
 
   const pages = calculatePages(content, 1000);
 
-  const handleExport = async () => {
+  const handleExport = () => {
     if (pages.length === 0) return;
-
     setIsExporting(true);
     setExportProgress({ current: 0, total: pages.length });
-
-    try {
-      // Dispatch custom event to trigger export in preview component
-      const event = new CustomEvent("export-cards", {
-        detail: { pages, onProgress: setExportProgress },
-      });
-      window.dispatchEvent(event);
-    } catch (error) {
-      console.error("Export failed:", error);
-    } finally {
-      setIsExporting(false);
-    }
+    const event = new CustomEvent("export-cards", {
+      detail: {
+        totalPages: pages.length,
+        onProgress: setExportProgress,
+        onComplete: () => setIsExporting(false),
+      },
+    });
+    window.dispatchEvent(event);
   };
 
   return (

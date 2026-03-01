@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import {
   useContentThemeStore,
@@ -14,56 +16,104 @@ import { calculatePages } from "@/lib/pagination";
 import { CARD_CONFIG } from "@/lib/constants";
 import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
+import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
+import { ViewListIcon } from "@/components/icons/ViewListIcon";
 import html2canvas from "html2canvas";
+
+type PreviewViewMode = "pagination" | "list";
 
 export function ImagePreview() {
   const { content } = useMarkdownContentStore();
   const { theme, fontSize, density, alignment } = useContentThemeStore();
   const [currentPage, setCurrentPage] = useState(0);
-  const [pages, setPages] = useState<string[]>([]);
+  // 渲染时直接根据 content 计算页，避免 useEffect 滞后导致预览/导出页数不对
+  const pages = useMemo(() => calculatePages(content, 1000), [content]);
   const exportRefs = useRef<(HTMLElement | null)[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [viewMode, setViewMode] = useState<PreviewViewMode>("pagination");
 
-  // Recalculate pages when content changes
+  // 内容变短时把当前页钳在有效范围内
   useEffect(() => {
-    const newPages = calculatePages(content, 1000);
-    setPages(newPages);
-    setCurrentPage(0);
-  }, [content]);
+    setCurrentPage((prev) => Math.min(prev, Math.max(0, pages.length - 1)));
+  }, [pages.length]);
 
-  // Handle export event
+  // Handle export event: pageIndices 为要导出的页码（0-based），多张时打包为 zip
   useEffect(() => {
     const handleExport = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { pages: pagesToExport, onProgress, onComplete } = customEvent.detail;
+      const {
+        pageIndices,
+        totalPages,
+        onProgress,
+        onComplete,
+      } = customEvent.detail as {
+        pageIndices?: number[];
+        totalPages: number;
+        onProgress: (p: { current: number; total: number }) => void;
+        onComplete?: () => void;
+      };
+      const indices =
+        pageIndices ?? Array.from({ length: totalPages }, (_, i) => i);
+      if (indices.length === 0) return;
       setIsExporting(true);
 
       try {
-        // Wait for DOM to update with all pages rendered
         await new Promise((resolve) => setTimeout(resolve, 100));
-
-        for (let i = 0; i < pagesToExport.length; i++) {
-          const element = exportRefs.current[i];
+        const blobs: { blob: Blob; name: string }[] = [];
+        for (let j = 0; j < indices.length; j++) {
+          const pageIndex = indices[j];
+          const element = exportRefs.current[pageIndex];
           if (!element) continue;
-
-          const canvas = await html2canvas(element, {
+          const captured = await html2canvas(element, {
             scale: CARD_CONFIG.scale,
             backgroundColor: themeColors[theme].background,
             logging: false,
           });
-
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.download = `rednote-card-${i + 1}.png`;
-              link.href = url;
-              link.click();
-              URL.revokeObjectURL(url);
-            }
+          const targetW = CARD_CONFIG.width;
+          const targetH = CARD_CONFIG.height;
+          const canvas =
+            captured.width === targetW && captured.height === targetH
+              ? captured
+              : (() => {
+                  const out = document.createElement("canvas");
+                  out.width = targetW;
+                  out.height = targetH;
+                  const ctx = out.getContext("2d");
+                  if (ctx) {
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = "high";
+                    ctx.drawImage(
+                      captured,
+                      0,
+                      0,
+                      captured.width,
+                      captured.height,
+                      0,
+                      0,
+                      targetW,
+                      targetH
+                    );
+                  }
+                  return out;
+                })();
+          const blob = await new Promise<Blob | null>((resolveBlob) => {
+            canvas.toBlob(resolveBlob, "image/png");
           });
-
-          onProgress({ current: i + 1, total: pagesToExport.length });
+          if (blob) {
+            blobs.push({
+              blob,
+              name: `rednote-card-${pageIndex + 1}.png`,
+            });
+          }
+          onProgress({ current: j + 1, total: indices.length });
+        }
+        if (blobs.length <= 3) {
+          blobs.forEach(({ blob, name }) => saveAs(blob, name));
+        } else {
+          const zip = new JSZip();
+          blobs.forEach(({ blob, name }) => zip.file(name, blob));
+          const zipBlob = await zip.generateAsync({ type: "blob" });
+          saveAs(zipBlob, "rednote-cards.zip");
         }
       } finally {
         setIsExporting(false);
@@ -89,9 +139,14 @@ export function ImagePreview() {
   const currentFontSize = fontSizes[fontSize];
   const currentDensity = densitySpacing[density];
 
-  // Render all pages for export, but only show current page
-  const renderPage = (pageContent: string, index: number) => {
-    const isVisible = index === currentPage || isExporting;
+  // Render a single card; in list mode all cards are visible, in pagination only current
+  const renderPage = (
+    pageContent: string,
+    index: number,
+    forceVisible = false
+  ) => {
+    const isVisible =
+      forceVisible || index === currentPage || isExporting;
     const displayStyle = isVisible ? {} : { display: "none" };
 
     return (
@@ -100,7 +155,7 @@ export function ImagePreview() {
         ref={(el) => {
           exportRefs.current[index] = el;
         }}
-        className="card-content rounded-lg overflow-hidden"
+        className="card-content rounded-lg"
         style={{
           backgroundColor: currentColors.background,
           color: currentColors.text,
@@ -110,7 +165,12 @@ export function ImagePreview() {
           textAlign: alignment,
           width: "100%",
           minHeight: "100%",
+          maxHeight: "100%",
           boxSizing: "border-box",
+          overflowWrap: "break-word",
+          wordBreak: "break-word",
+          overflowX: "hidden",
+          overflowY: "hidden",
           ...displayStyle,
         }}
       >
@@ -118,24 +178,24 @@ export function ImagePreview() {
           remarkPlugins={[remarkGfm]}
           components={{
             h1: ({ children }) => (
-              <h1 className="text-3xl font-bold mb-4 mt-0">{children}</h1>
+              <h1 className="text-3xl font-bold mb-2 mt-0">{children}</h1>
             ),
             h2: ({ children }) => (
-              <h2 className="text-2xl font-bold mb-3 mt-6">{children}</h2>
+              <h2 className="text-2xl font-bold mb-2 mt-4">{children}</h2>
             ),
             h3: ({ children }) => (
-              <h3 className="text-xl font-bold mb-2 mt-4">{children}</h3>
+              <h3 className="text-xl font-bold mb-1.5 mt-3">{children}</h3>
             ),
             p: ({ children }) => (
-              <p className="mb-4 leading-relaxed">{children}</p>
+              <p className="mb-2" style={{ lineHeight: "inherit" }}>{children}</p>
             ),
             ul: ({ children }) => (
-              <ul className="mb-4 pl-6 list-disc">{children}</ul>
+              <ul className="mb-2 pl-6 list-disc">{children}</ul>
             ),
             ol: ({ children }) => (
-              <ol className="mb-4 pl-6 list-decimal">{children}</ol>
+              <ol className="mb-2 pl-6 list-decimal">{children}</ol>
             ),
-            li: ({ children }) => <li className="mb-1">{children}</li>,
+            li: ({ children }) => <li className="mb-0.5">{children}</li>,
             code: ({ children }) => (
               <code
                 className="px-1 py-0.5 rounded text-sm"
@@ -162,43 +222,107 @@ export function ImagePreview() {
   return (
     <div className="h-full flex flex-col">
       {/* Card Header */}
-      <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
+      <div className="px-3 py-1.5 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">图片预览</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={goToPrevPage}
-            disabled={currentPage === 0}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
-            aria-label="上一页"
-          >
-            <ChevronLeftIcon />
-          </button>
-          <span className="text-sm text-gray-600 min-w-[3rem] text-center">
-            {pages.length > 0 ? currentPage + 1 : 0} / {pages.length}
-          </span>
-          <button
-            onClick={goToNextPage}
-            disabled={currentPage >= pages.length - 1}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
-            aria-label="下一页"
-          >
-            <ChevronRightIcon />
-          </button>
+        <div className="flex items-center gap-1">
+          <div className="flex items-center rounded-md border border-apple-border overflow-hidden">
+            <button
+              onClick={() => setViewMode("pagination")}
+              className={`p-1.5 transition-colors ${
+                viewMode === "pagination"
+                  ? "bg-gray-200 text-gray-800"
+                  : "hover:bg-gray-100 text-gray-600"
+              }`}
+              aria-label="翻页模式"
+              title="翻页模式"
+            >
+              <ViewSingleIcon />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 transition-colors ${
+                viewMode === "list"
+                  ? "bg-gray-200 text-gray-800"
+                  : "hover:bg-gray-100 text-gray-600"
+              }`}
+              aria-label="竖排列表"
+              title="竖排列表"
+            >
+              <ViewListIcon />
+            </button>
+          </div>
+          {viewMode === "pagination" && (
+            <>
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage === 0}
+                className="p-1 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                aria-label="上一页"
+              >
+                <ChevronLeftIcon />
+              </button>
+              <span className="text-xs text-gray-600 min-w-[2.5rem] text-center">
+                {pages.length > 0 ? currentPage + 1 : 0} / {pages.length}
+              </span>
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage >= pages.length - 1}
+                className="p-1 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                aria-label="下一页"
+              >
+                <ChevronRightIcon />
+              </button>
+            </>
+          )}
+          {viewMode === "list" && (
+            <span className="text-xs text-gray-600">
+              共 {pages.length} 页
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 嵌套卡片：预览内容区 */}
-      <div className="flex-1 flex items-center justify-center p-6 overflow-auto min-h-0 bg-[#F5F5F7]">
-        <div
-          className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden"
-          style={{
-            width: "100%",
-            maxWidth: "400px",
-            aspectRatio: `${CARD_CONFIG.width} / ${CARD_CONFIG.height}`,
-            position: "relative",
-          }}
-        >
-          {isExporting ? (
+      {/* 预览区：固定 450×600 与导出 900×1200 一致（scale 2） */}
+      <div
+        className={`flex-1 min-h-0 bg-[#F5F5F7] ${
+          viewMode === "list"
+            ? "flex flex-col overflow-hidden"
+            : "flex items-center justify-center p-3 overflow-auto"
+        }`}
+      >
+        {viewMode === "list" && !isExporting ? (
+          <div className="flex-1 overflow-y-auto p-3">
+            <div
+              className="flex flex-col items-center gap-4 mx-auto"
+              style={{
+                width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+              }}
+            >
+              {pages.map((pageContent, index) => (
+                <div
+                  key={index}
+                  className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
+                  style={{
+                    width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+                    height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
+                  }}
+                >
+                  {renderPage(pageContent, index, true)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-3 overflow-auto min-h-0 w-full">
+            <div
+              className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
+              style={{
+                width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+                height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
+                position: "relative",
+              }}
+            >
+              {isExporting ? (
             // Render all pages for export
             <div className="absolute inset-0">
               {pages.map((page, index) => (
@@ -221,37 +345,40 @@ export function ImagePreview() {
                     lineHeight: currentDensity.lineHeight,
                     textAlign: alignment,
                     boxSizing: "border-box",
-                    overflow: "hidden",
+                    overflowX: "hidden",
+                    overflowY: "hidden",
+                    overflowWrap: "break-word",
+                    wordBreak: "break-word",
                   }}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
                       h1: ({ children }) => (
-                        <h1 className="text-3xl font-bold mb-4 mt-0">
+                        <h1 className="text-3xl font-bold mb-2 mt-0">
                           {children}
                         </h1>
                       ),
                       h2: ({ children }) => (
-                        <h2 className="text-2xl font-bold mb-3 mt-6">
+                        <h2 className="text-2xl font-bold mb-2 mt-4">
                           {children}
                         </h2>
                       ),
                       h3: ({ children }) => (
-                        <h3 className="text-xl font-bold mb-2 mt-4">
+                        <h3 className="text-xl font-bold mb-1.5 mt-3">
                           {children}
                         </h3>
                       ),
                       p: ({ children }) => (
-                        <p className="mb-4 leading-relaxed">{children}</p>
+                        <p className="mb-2" style={{ lineHeight: "inherit" }}>{children}</p>
                       ),
                       ul: ({ children }) => (
-                        <ul className="mb-4 pl-6 list-disc">{children}</ul>
+                        <ul className="mb-2 pl-6 list-disc">{children}</ul>
                       ),
                       ol: ({ children }) => (
-                        <ol className="mb-4 pl-6 list-decimal">{children}</ol>
+                        <ol className="mb-2 pl-6 list-decimal">{children}</ol>
                       ),
-                      li: ({ children }) => <li className="mb-1">{children}</li>,
+                      li: ({ children }) => <li className="mb-0.5">{children}</li>,
                       code: ({ children }) => (
                         <code
                           className="px-1 py-0.5 rounded text-sm"
@@ -277,12 +404,14 @@ export function ImagePreview() {
               ))}
             </div>
           ) : (
-            // Show only current page for preview
-            <div className="w-full h-full">
-              {renderPage(pages[currentPage] || "", currentPage)}
+                // Show only current page for preview
+                <div className="w-full h-full">
+                  {renderPage(pages[currentPage] || "", currentPage)}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

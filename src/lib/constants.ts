@@ -1,6 +1,7 @@
+/** 小红书竖版配图标准尺寸（像素） */
 export const CARD_CONFIG = {
-  width: 1242,
-  height: 1660,
+  width: 900,
+  height: 1200,
   scale: 2,
 } as const;
 
