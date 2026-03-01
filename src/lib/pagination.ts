@@ -45,15 +45,16 @@ const DENSITY_CONFIG = {
 // ============================================================================
 
 let measureContainer: HTMLElement | null = null;
+let measureWrapper: HTMLElement | null = null;
 
 /**
- * 获取或创建测量容器
- * 容器使用与实际卡片相同的样式，但不可见
+ * 初始化测量容器和包装器（只创建一次，复用样式）
  */
-function getMeasureContainer(): HTMLElement {
+function initMeasureContainer(context: RenderContext): void {
   if (!isBrowser) {
     throw new Error("DOM measurement is only available in browser environment");
   }
+
   if (!measureContainer) {
     measureContainer = document.createElement("div");
     measureContainer.style.position = "absolute";
@@ -67,13 +68,48 @@ function getMeasureContainer(): HTMLElement {
     measureContainer.style.zIndex = "-1";
     document.body.appendChild(measureContainer);
   }
-  return measureContainer;
+
+  // 创建测量包装器（样式与实际卡片完全一致）
+  if (!measureWrapper) {
+    measureWrapper = document.createElement("div");
+    measureWrapper.style.width = "100%";
+    measureWrapper.style.boxSizing = "border-box";
+    measureWrapper.style.color = context.colors.text;
+    measureWrapper.style.fontSize = `${FONT_SIZE_CONFIG[context.fontSize]}px`;
+    measureWrapper.style.lineHeight = DENSITY_CONFIG[context.density].lineHeight;
+    measureWrapper.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    measureWrapper.style.padding = "0";
+    measureWrapper.style.overflowWrap = "break-word";
+    measureWrapper.style.wordBreak = "break-word";
+    measureWrapper.style.overflowX = "hidden";
+    measureWrapper.style.overflowY = "hidden";
+
+    // 处理 cardFrame
+    const cardFrame = context.template.cardFrame;
+    if (cardFrame) {
+      const marginPct = `${cardFrame.sideMarginPercent}%`;
+      measureWrapper.style.paddingLeft = marginPct;
+      measureWrapper.style.paddingRight = marginPct;
+      if (cardFrame.topLine) {
+        measureWrapper.style.paddingTop = "24px";
+      }
+    }
+
+    // 处理 appleNotes 头部
+    const hasCustomHeader = context.template.layout === "appleNotes";
+    if (hasCustomHeader) {
+      measureWrapper.style.padding = `${DENSITY_CONFIG[context.density].padding}px`;
+    }
+
+    measureContainer.appendChild(measureWrapper);
+  }
 }
 
 /**
  * 清理测量容器
  */
 export function cleanupMeasureContainer(): void {
+  measureWrapper = null;
   if (measureContainer) {
     document.body.removeChild(measureContainer);
     measureContainer = null;
@@ -98,10 +134,6 @@ interface RenderContext {
  * 创建渲染上下文
  */
 function createRenderContext(options: PaginationOptions): RenderContext {
-  if (!isBrowser) {
-    throw new Error("DOM measurement is only available in browser environment");
-  }
-  const container = getMeasureContainer();
   const template = getTemplate(options.theme);
   const colors = template.colors;
 
@@ -131,7 +163,7 @@ function createRenderContext(options: PaginationOptions): RenderContext {
   availableHeight -= extraTopSpace;
 
   return {
-    container,
+    container: null as any, // 稍后初始化
     availableHeight,
     theme: options.theme,
     fontSize: options.fontSize,
@@ -146,155 +178,6 @@ function createRenderContext(options: PaginationOptions): RenderContext {
 // ============================================================================
 
 /**
- * 将 Markdown 转换为简单的 HTML（用于测量）
- * 这是一个简化的转换器，专注于保持与实际渲染相同的视觉效果
- */
-function markdownToSimpleHTML(markdown: string, context: RenderContext): string {
-  const { colors, template } = context;
-  const codeBg = getCodeBackground(context.theme);
-  const blockquoteColor = template.blockquoteColor || colors.accent;
-  const accentColor = colors.accent;
-  const bgColor = colors.background;
-
-  let html = markdown;
-
-  // 处理代码块 ```...```
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const escaped = escapeHtml(code.trim());
-    return `<pre style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 6px; overflow-x: auto; margin-bottom: 8px; font-size: 14px; line-height: 1.5;"><code>${escaped}</code></pre>`;
-  });
-
-  // 处理行内代码 `...`
-  html = html.replace(/`([^`]+)`/g, (_, code) => {
-    const escaped = escapeHtml(code);
-    return `<code style="background: ${codeBg}; padding: 2px 6px; border-radius: 4px; font-size: 14px;">${escaped}</code>`;
-  });
-
-  // 处理粗体 **...**
-  html = html.replace(/\*\*([^*]+)\*\*/g, (_, text) => {
-    return `<strong style="color: ${accentColor}; font-weight: bold;">${text}</strong>`;
-  });
-
-  // 处理斜体 *...*
-  html = html.replace(/\*([^*]+)\*/g, (_, text) => {
-    return `<em style="font-style: italic;">${text}</em>`;
-  });
-
-  // 处理高亮 ==...==
-  html = html.replace(/==([^=]+)==/g, (_, text) => {
-    return `<mark style="background: ${accentColor}; color: ${bgColor}; padding: 2px 4px; border-radius: 4px; font-weight: 500;">${text}</mark>`;
-  });
-
-  // 处理引用 > ...
-  html = html.replace(/^>\s+(.+)$/gm, (_, text) => {
-    return `<blockquote style="border-left: 4px solid ${blockquoteColor}; padding-left: 12px; padding-top: 4px; padding-bottom: 4px; margin: 8px 0; font-style: italic; opacity: 0.9;">${text}</blockquote>`;
-  });
-
-  // 处理标题 # ...
-  html = html.replace(/^#####\s+(.+)$/gm, (_, text) => {
-    return `<h3 style="font-size: 20px; font-weight: bold; margin-bottom: 6px; margin-top: 12px;">${text}</h3>`;
-  });
-  html = html.replace(/^####\s+(.+)$/gm, (_, text) => {
-    return `<h3 style="font-size: 20px; font-weight: bold; margin-bottom: 6px; margin-top: 12px;">${text}</h3>`;
-  });
-  html = html.replace(/^###\s+(.+)$/gm, (_, text) => {
-    return `<h3 style="font-size: 20px; font-weight: bold; margin-bottom: 6px; margin-top: 12px;">${text}</h3>`;
-  });
-  html = html.replace(/^##\s+(.+)$/gm, (_, text) => {
-    return `<h2 style="font-size: 24px; font-weight: bold; margin-bottom: 8px; margin-top: 16px;">${text}</h2>`;
-  });
-  html = html.replace(/^#\s+(.+)$/gm, (_, text) => {
-    return `<h1 style="font-size: 30px; font-weight: bold; margin-bottom: 8px; margin-top: 0;">${text}</h1>`;
-  });
-
-  // 处理无序列表 - ...
-  html = html.replace(/^[\*\-]\s+(.+)$/gm, (_, text) => {
-    return `<li style="margin-bottom: 2px;">${text}</li>`;
-  });
-
-  // 处理有序列表 1. ...
-  html = html.replace(/^\d+\.\s+(.+)$/gm, (_, text) => {
-    return `<li style="margin-bottom: 2px;">${text}</li>`;
-  });
-
-  // 处理段落（连续的非空行）
-  const lines = html.split("\n");
-  const result: string[] = [];
-  let inParagraph = false;
-  let paragraphContent = "";
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // 空行结束段落
-    if (!trimmed) {
-      if (inParagraph && paragraphContent.trim()) {
-        result.push(`<p style="margin-bottom: 8px; line-height: inherit;">${paragraphContent}</p>`);
-        paragraphContent = "";
-      }
-      inParagraph = false;
-      continue;
-    }
-
-    // 检查是否是块级元素
-    if (trimmed.match(/^(<[hulp][1-6]?|<pre|<blockquote|<li|<h[1-6])/)) {
-      // 块级元素，先结束当前段落
-      if (inParagraph && paragraphContent.trim()) {
-        result.push(`<p style="margin-bottom: 8px; line-height: inherit;">${paragraphContent}</p>`);
-        paragraphContent = "";
-      }
-      result.push(line);
-      inParagraph = false;
-    } else {
-      // 普通文本，加入段落
-      if (inParagraph) {
-        paragraphContent += " " + trimmed;
-      } else {
-        paragraphContent = trimmed;
-        inParagraph = true;
-      }
-    }
-  }
-
-  // 处理最后一个段落
-  if (inParagraph && paragraphContent.trim()) {
-    result.push(`<p style="margin-bottom: 8px; line-height: inherit;">${paragraphContent}</p>`);
-  }
-
-  // 处理列表：将连续的 li 包装在 ul/ol 中
-  const finalResult: string[] = [];
-  let inList = false;
-  let listType: "ul" | "ol" = "ul";
-  let listItems: string[] = [];
-
-  for (const line of result) {
-    if (line.trim().startsWith("<li>")) {
-      if (!inList) {
-        inList = true;
-        // 检测列表类型（根据原始内容）
-        listType = "ul";
-      }
-      listItems.push(line);
-    } else {
-      if (inList) {
-        const listTag = listType;
-        finalResult.push(`<${listTag} style="margin-bottom: 8px; padding-left: 24px; list-style-type: ${listType === "ul" ? "disc" : "decimal"};">${listItems.join("")}</${listTag}>`);
-        listItems = [];
-        inList = false;
-      }
-      finalResult.push(line);
-    }
-  }
-
-  if (inList) {
-    const listTag = listType;
-    finalResult.push(`<${listTag} style="margin-bottom: 8px; padding-left: 24px; list-style-type: ${listTag === "ul" ? "disc" : "decimal"};">${listItems.join("")}</${listTag}>`);
-  }
-
-  return finalResult.join("\n");
-}
-
-/**
  * HTML 转义
  */
 function escapeHtml(text: string): string {
@@ -304,59 +187,187 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * 将 Markdown 渲染到测量容器并返回实际高度
+ * 将内联 Markdown 转换为 HTML（处理粗体、斜体、代码、高亮等）
  */
-function renderMarkdownToMeasure(markdown: string, context: RenderContext): number {
-  const {
-    container,
-    colors,
-    template,
-  } = context;
+function convertInlineMarkdown(text: string, context: RenderContext): string {
+  const { colors, template } = context;
+  const codeBg = getCodeBackground(context.theme);
+  const accentColor = colors.accent;
+  const bgColor = colors.background;
 
-  // 清空容器
-  container.innerHTML = "";
+  let result = text;
 
-  // 创建测量包装器
-  const wrapper = document.createElement("div");
-  wrapper.style.width = "100%";
-  wrapper.style.boxSizing = "border-box";
-  wrapper.style.color = colors.text;
-  wrapper.style.fontSize = `${FONT_SIZE_CONFIG[context.fontSize]}px`;
-  wrapper.style.lineHeight = DENSITY_CONFIG[context.density].lineHeight;
-  wrapper.style.padding = "0";
-  wrapper.style.overflowWrap = "break-word";
-  wrapper.style.wordBreak = "break-word";
-  wrapper.style.overflowX = "hidden";
-  wrapper.style.overflowY = "hidden";
+  // 处理行内代码 `...`（最先处理，避免被其他规则干扰）
+  result = result.replace(/`([^`]+)`/g, (_, code) => {
+    const escaped = escapeHtml(code);
+    return `<code style="background: ${codeBg}; padding: 2px 4px; border-radius: 4px; font-size: 0.875em;">${escaped}</code>`;
+  });
 
-  // 处理 cardFrame
-  const cardFrame = template.cardFrame;
-  if (cardFrame) {
-    const marginPct = `${cardFrame.sideMarginPercent}%`;
-    wrapper.style.paddingLeft = marginPct;
-    wrapper.style.paddingRight = marginPct;
-    if (cardFrame.topLine) {
-      wrapper.style.paddingTop = "24px";
+  // 处理粗体 **...**
+  result = result.replace(/\*\*([^*]+)\*\*/g, (_, text) => {
+    return `<strong style="color: ${accentColor}; font-weight: 700;">${text}</strong>`;
+  });
+
+  // 处理斜体 *...*（避免匹配到 **）
+  result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, text) => {
+    return `<em style="font-style: italic;">${text}</em>`;
+  });
+
+  // 处理高亮 ==...==
+  result = result.replace(/==([^=]+)==/g, (_, text) => {
+    return `<mark style="background: ${accentColor}; color: ${bgColor}; padding: 2px 4px; border-radius: 4px; font-weight: 500;">${text}</mark>`;
+  });
+
+  return result;
+}
+
+/**
+ * 将 Markdown 转换为简单的 HTML（用于测量）
+ * 尽量模拟 ReactMarkdown + Tailwind 的渲染效果
+ */
+function markdownToSimpleHTML(markdown: string, context: RenderContext): string {
+  const { colors, template } = context;
+  const codeBg = getCodeBackground(context.theme);
+  const blockquoteColor = template.blockquoteColor || colors.accent;
+  const accentColor = colors.accent;
+
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let inCodeBlock = false;
+  let codeContent = "";
+  let inParagraph = false;
+  let paragraphLines: string[] = [];
+
+  // 辅助函数：结束当前段落
+  const endParagraph = () => {
+    if (inParagraph && paragraphLines.length > 0) {
+      const text = paragraphLines.join(" ");
+      const converted = convertInlineMarkdown(text, context);
+      result.push(`<p style="margin: 0 0 8px 0; line-height: inherit;">${converted}</p>`);
+    }
+    inParagraph = false;
+    paragraphLines = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // 处理代码块
+    if (trimmed.startsWith("```")) {
+      endParagraph();
+      if (inCodeBlock) {
+        // 结束代码块
+        const escaped = escapeHtml(codeContent.trim());
+        result.push(`<pre style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 8px 0; font-size: 14px; line-height: 1.5;"><code style="font-family: monospace;">${escaped}</code></pre>`);
+        codeContent = "";
+        inCodeBlock = false;
+      } else {
+        // 开始代码块
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeContent += line + "\n";
+      continue;
+    }
+
+    // 空行：结束段落
+    if (!trimmed) {
+      endParagraph();
+      continue;
+    }
+
+    // 标题
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      endParagraph();
+      const level = headingMatch[1].length;
+      const text = convertInlineMarkdown(headingMatch[2], context);
+      let style = "";
+      if (level === 1) {
+        style = "font-size: 30px; font-weight: 700; margin: 0 0 8px 0;";
+      } else if (level === 2) {
+        style = "font-size: 24px; font-weight: 700; margin: 16px 0 8px 0;";
+      } else {
+        style = "font-size: 20px; font-weight: 700; margin: 12px 0 6px 0;";
+      }
+      result.push(`<h${level} style="${style}">${text}</h${level}>`);
+      continue;
+    }
+
+    // 引用
+    if (trimmed.startsWith("> ")) {
+      endParagraph();
+      const text = convertInlineMarkdown(trimmed.slice(2), context);
+      result.push(`<blockquote style="border-left: 4px solid ${blockquoteColor}; padding-left: 12px; padding-top: 4px; padding-bottom: 4px; margin: 8px 0; font-style: italic; opacity: 0.9;">${text}</blockquote>`);
+      continue;
+    }
+
+    // 列表项
+    const listMatch = trimmed.match(/^[\*\-]\s+(.+)$/);
+    const orderedListMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (listMatch || orderedListMatch) {
+      if (!inParagraph) {
+        // 开始新段落累积列表项
+        inParagraph = true;
+      }
+      const text = convertInlineMarkdown(listMatch ? listMatch[1] : orderedListMatch![1], context);
+      paragraphLines.push(`<li style="margin-bottom: 2px;">${text}</li>`);
+      continue;
+    }
+
+    // 普通文本行
+    if (!inParagraph) {
+      inParagraph = true;
+    }
+    paragraphLines.push(trimmed);
+  }
+
+  // 结束最后的段落
+  endParagraph();
+
+  // 将连续的 li 包装在 ul 中
+  const finalResult: string[] = [];
+  for (const line of result) {
+    if (line.trim().startsWith("<li>")) {
+      if (finalResult.length > 0 && finalResult[finalResult.length - 1].startsWith("<ul")) {
+        // 添加到现有的 ul
+        finalResult[finalResult.length - 1] = finalResult[finalResult.length - 1].replace("</ul>", "") + line + "</ul>";
+      } else {
+        // 创建新的 ul
+        finalResult.push(`<ul style="margin: 0 0 8px 0; padding-left: 24px; list-style-type: disc;">${line}</ul>`);
+      }
+    } else {
+      finalResult.push(line);
     }
   }
 
-  // 处理 appleNotes 头部
-  const hasCustomHeader = template.layout === "appleNotes";
-  if (hasCustomHeader) {
-    wrapper.style.padding = `${DENSITY_CONFIG[context.density].padding}px`;
+  return finalResult.join("");
+}
+
+/**
+ * 将 Markdown 渲染到测量容器并返回实际高度
+ */
+function renderMarkdownToMeasure(markdown: string, context: RenderContext): number {
+  // 确保测量容器已初始化
+  initMeasureContainer(context);
+
+  if (!measureWrapper) {
+    throw new Error("Measure wrapper not initialized");
   }
 
-  // 转换 Markdown 为 HTML 并渲染
+  // 清空并渲染
+  measureWrapper.innerHTML = "";
   const html = markdownToSimpleHTML(markdown, context);
-  wrapper.innerHTML = html || "<p style='line-height: inherit;'>*空页面*</p>";
-
-  container.appendChild(wrapper);
+  measureWrapper.innerHTML = html || "<p style='line-height: inherit; margin: 0;'>*空页面*</p>";
 
   // 强制浏览器计算布局
-  container.offsetHeight;
+  measureContainer!.offsetHeight;
 
   // 获取实际高度
-  const height = wrapper.scrollHeight;
+  const height = measureWrapper.scrollHeight;
 
   return height;
 }
@@ -573,13 +584,18 @@ function paginateByActualHeight(
   const pages: ContentBlock[][] = [];
   const { availableHeight } = context;
 
-  // 留出一点安全边距（5px）
-  const safeHeight = availableHeight - 5;
+  // 使用实际可用高度的 95% 作为安全边距
+  const safeHeight = Math.floor(availableHeight * 0.95);
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentHeight = 0;
 
   for (const block of blocks) {
+    // 跳过空块
+    if (block.type === "empty") {
+      continue;
+    }
+
     // 先测试当前块是否单独超过一页
     const singleBlockHeight = renderMarkdownToMeasure(
       blocksToMarkdown([block]),
