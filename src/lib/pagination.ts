@@ -395,7 +395,9 @@ function calculatePagesByHeight(
   if (context.template.id === "dark") {
     safeMargin = 0.55; // dark 模板有 QuoteIcon 占用右上角空间
   } else if (context.template.decoration === "sketch") {
-    safeMargin = 0.55; // sketch 模板有装饰占用空间
+    safeMargin = 0.50; // sketch 模板有装饰占用空间，需要更保守
+  } else if (context.template.layout === "appleNotes") {
+    safeMargin = 0.58; // appleNotes 有头部，稍微保守一点
   }
 
   const safeAvailableHeight = availableHeight * safeMargin;
