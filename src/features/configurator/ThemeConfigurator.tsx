@@ -10,14 +10,7 @@ import {
   type Density,
   type Alignment,
 } from "@/store/useContentThemeStore";
-
-const themeLabels: Record<Theme, string> = {
-  classic: "经典白",
-  dark: "深空灰",
-  parchment: "羊皮纸",
-  morandi: "莫兰迪",
-  appleNotes: "苹果备忘录",
-};
+import { themeLabels, THEME_IDS } from "@/lib/templates";
 
 const fontSizeLabels: Record<FontSize, string> = {
   sm: "小",
@@ -47,7 +40,7 @@ export function ThemeConfigurator() {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">主题</label>
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(themeLabels) as Theme[]).map((key) => (
+          {THEME_IDS.map((key) => (
             <button
               key={key}
               onClick={() => setTheme(key)}

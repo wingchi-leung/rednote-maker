@@ -12,14 +12,14 @@ import {
   fontSizes,
   densitySpacing,
 } from "@/store/useContentThemeStore";
+import { getTemplateLayout, getCodeBackground } from "@/lib/templates";
 import { calculatePages } from "@/lib/pagination";
 import { CARD_CONFIG } from "@/lib/constants";
 import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
-import { ShareIcon } from "@/components/icons/ShareIcon";
-import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
+import { CardHeaderAppleNotes } from "@/features/preview/CardHeaderAppleNotes";
 import html2canvas from "html2canvas";
 
 type PreviewViewMode = "pagination" | "list";
@@ -191,7 +191,9 @@ export function ImagePreview() {
       forceVisible || index === currentPage || isExporting;
     const displayStyle = isVisible ? {} : { display: "none" };
 
-    const isAppleNotes = theme === "appleNotes";
+    const layout = getTemplateLayout(theme);
+    const hasCustomHeader = layout === "appleNotes";
+    const codeBg = getCodeBackground(theme);
     return (
       <div
         key={index}
@@ -203,7 +205,7 @@ export function ImagePreview() {
           backgroundColor: currentColors.background,
           color: currentColors.text,
           fontSize: currentFontSize,
-          padding: isAppleNotes ? 0 : currentDensity.padding,
+          padding: hasCustomHeader ? 0 : currentDensity.padding,
           lineHeight: currentDensity.lineHeight,
           textAlign: alignment,
           width: "100%",
@@ -219,27 +221,12 @@ export function ImagePreview() {
           ...displayStyle,
         }}
       >
-        {isAppleNotes && (
-          <div
-            className="shrink-0 flex items-center justify-between"
-            style={{
-              padding: "12px 16px",
-              color: currentColors.accent,
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <ChevronLeftIcon />
-              <span style={{ fontSize: "17px", fontWeight: 400 }}>Notes</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShareIcon />
-              <KebabMenuIcon />
-            </div>
-          </div>
+        {layout === "appleNotes" && (
+          <CardHeaderAppleNotes accentColor={currentColors.accent} />
         )}
         <div
           style={{
-            padding: isAppleNotes ? currentDensity.padding : 0,
+            padding: hasCustomHeader ? currentDensity.padding : 0,
             flex: 1,
             overflow: "hidden",
             lineHeight: currentDensity.lineHeight,
@@ -271,12 +258,7 @@ export function ImagePreview() {
             code: ({ children }) => (
               <code
                 className="px-1 py-0.5 rounded text-sm"
-                style={{
-                  backgroundColor:
-                    theme === "dark"
-                      ? "rgba(255,255,255,0.1)"
-                      : "rgba(0,0,0,0.05)",
-                }}
+                style={{ backgroundColor: codeBg }}
               >
                 {children}
               </code>
@@ -474,10 +456,7 @@ export function ImagePreview() {
                         <code
                           className="px-1 py-0.5 rounded text-sm"
                           style={{
-                            backgroundColor:
-                              theme === "dark"
-                                ? "rgba(255,255,255,0.1)"
-                                : "rgba(0,0,0,0.05)",
+                            backgroundColor: getCodeBackground(theme),
                           }}
                         >
                           {children}

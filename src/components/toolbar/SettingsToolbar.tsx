@@ -9,17 +9,10 @@ import {
   type Density,
   type Alignment,
 } from "@/store/useContentThemeStore";
+import { themeLabels, THEME_IDS } from "@/lib/templates";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { calculatePages } from "@/lib/pagination";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
-
-const themeLabels: Record<Theme, string> = {
-  classic: "经典白",
-  dark: "深空灰",
-  parchment: "羊皮纸",
-  morandi: "莫兰迪",
-  appleNotes: "苹果备忘录",
-};
 
 const fontSizeLabels: Record<FontSize, string> = {
   sm: "小",
@@ -109,7 +102,7 @@ export function SettingsToolbar() {
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium text-gray-500">主题</span>
         <div className="flex gap-1">
-          {(Object.keys(themeLabels) as Theme[]).map((key) => (
+          {THEME_IDS.map((key) => (
             <button
               key={key}
               onClick={() => setTheme(key)}

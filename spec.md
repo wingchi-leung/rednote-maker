@@ -23,7 +23,6 @@ RedNoteMaker 最终产品需求文档 (PRD)
 
 
 1.3 样式预设 (Themes)
-克制的美感： 提供 3-5 款 Apple 风格的主题（经典白、深空灰、羊皮纸色、低饱和莫兰迪）。
 
 自定义封面： 支持用户上传一张图片作为第 1 张卡片的背景，并自动叠加标题。
 
@@ -36,6 +35,9 @@ RedNoteMaker 最终产品需求文档 (PRD)
 3. 技术规范 (Technical Spec)
 3.1 关键参数定义参数数值/说明画布尺寸$1242 \times 1660$ px (3:4 比例，高清)渲染倍率$Scale = 2$ (确保在 Retina 屏幕下不模糊)导出格式PNG (Lossless)字体栈SF Pro, Inter, PingFang SC, system-ui
 
+3.2 模板可扩展架构
+- **单一数据源**：`src/lib/templates.ts`。所有模板的增删改只改此文件。每条配置含：`id`、`label`、`colors`(background/text/accent)、`layout`(default | appleNotes)、可选 `codeBackground`。由 `TEMPLATES` 推导出 `Theme` 类型、`themeColors`、`themeLabels`、`THEME_IDS` 及工具函数 `getTemplate`、`getTemplateLayout`、`getCodeBackground`。
+- **加新模板**：在 `TEMPLATES` 中新增一条即可，无需改 ThemeConfigurator、SettingsToolbar 或到处写 `theme === "xxx"`。
 
 技术难点与方案长图切割： 由于 HTML 元素不能跨 Canvas 切断，我们需要一个「虚拟渲染容器」。先计算总高度 $H_{total}$，根据单张高度 $H_{page}$ 计算出 $N = \lceil H_{total} / H_{page} \rceil$，然后通过 CSS transform: translateY 偏移来截取不同段落。性能优化： 使用 Web Worker 处理图片生成过程，避免在大规模文本转换时导致浏览器 UI 冻结。
 
