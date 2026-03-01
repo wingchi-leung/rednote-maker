@@ -16,7 +16,7 @@ import {
 import { getTemplate, getTemplateLayout, getCodeBackground } from "@/lib/templates";
 import { SketchBackground } from "@/features/preview/SketchBackground";
 import { calculatePages } from "@/lib/pagination";
-import { CARD_CONFIG } from "@/lib/constants";
+import { CARD_CONFIG, EXPORT_CONFIG } from "@/lib/constants";
 import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
@@ -42,7 +42,7 @@ export function ImagePreview() {
   const { theme, fontSize, density, alignment } = useContentThemeStore();
   const [currentPage, setCurrentPage] = useState(0);
   // 渲染时直接根据 content 计算页，避免 useEffect 滞后导致预览/导出页数不对
-  const pages = useMemo(() => calculatePages(content, 1000), [content]);
+  const pages = useMemo(() => calculatePages(content, EXPORT_CONFIG.maxCharsPerPage), [content]);
   const exportRefs = useRef<(HTMLElement | null)[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<PreviewViewMode>("pagination");

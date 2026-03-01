@@ -4,14 +4,14 @@ import { useState } from "react";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { calculatePages } from "@/lib/pagination";
-import { CARD_CONFIG } from "@/lib/constants";
+import { CARD_CONFIG, EXPORT_CONFIG } from "@/lib/constants";
 
 export function ExportOptions() {
   const { content } = useMarkdownContentStore();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
 
-  const pages = calculatePages(content, 1000);
+  const pages = calculatePages(content, EXPORT_CONFIG.maxCharsPerPage);
 
   const handleExport = () => {
     if (pages.length === 0) return;
