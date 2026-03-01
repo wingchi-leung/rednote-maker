@@ -16,6 +16,7 @@ const themeLabels: Record<Theme, string> = {
   dark: "深空灰",
   parchment: "羊皮纸",
   morandi: "莫兰迪",
+  appleNotes: "苹果备忘录",
 };
 
 const fontSizeLabels: Record<FontSize, string> = {

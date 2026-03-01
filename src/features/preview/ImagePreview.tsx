@@ -18,6 +18,8 @@ import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
+import { ShareIcon } from "@/components/icons/ShareIcon";
+import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 import html2canvas from "html2canvas";
 
 type PreviewViewMode = "pagination" | "list";
@@ -189,6 +191,7 @@ export function ImagePreview() {
       forceVisible || index === currentPage || isExporting;
     const displayStyle = isVisible ? {} : { display: "none" };
 
+    const isAppleNotes = theme === "appleNotes";
     return (
       <div
         key={index}
@@ -200,7 +203,7 @@ export function ImagePreview() {
           backgroundColor: currentColors.background,
           color: currentColors.text,
           fontSize: currentFontSize,
-          padding: currentDensity.padding,
+          padding: isAppleNotes ? 0 : currentDensity.padding,
           lineHeight: currentDensity.lineHeight,
           textAlign: alignment,
           width: "100%",
@@ -211,10 +214,39 @@ export function ImagePreview() {
           wordBreak: "break-word",
           overflowX: "hidden",
           overflowY: "hidden",
+          display: "flex",
+          flexDirection: "column",
           ...displayStyle,
         }}
       >
-        <ReactMarkdown
+        {isAppleNotes && (
+          <div
+            className="shrink-0 flex items-center justify-between"
+            style={{
+              padding: "12px 16px",
+              color: currentColors.accent,
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <ChevronLeftIcon />
+              <span style={{ fontSize: "17px", fontWeight: 400 }}>Notes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ShareIcon />
+              <KebabMenuIcon />
+            </div>
+          </div>
+        )}
+        <div
+          style={{
+            padding: isAppleNotes ? currentDensity.padding : 0,
+            flex: 1,
+            overflow: "hidden",
+            lineHeight: currentDensity.lineHeight,
+            textAlign: alignment,
+          }}
+        >
+          <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             h1: ({ children }) => (
@@ -241,7 +273,9 @@ export function ImagePreview() {
                 className="px-1 py-0.5 rounded text-sm"
                 style={{
                   backgroundColor:
-                    theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                    theme === "dark"
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.05)",
                 }}
               >
                 {children}
@@ -255,6 +289,7 @@ export function ImagePreview() {
         >
           {pageContent || "*空页面*"}
         </ReactMarkdown>
+        </div>
       </div>
     );
   };

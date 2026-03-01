@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Theme = "classic" | "dark" | "parchment" | "morandi";
+export type Theme = "classic" | "dark" | "parchment" | "morandi" | "appleNotes";
 export type FontSize = "sm" | "md" | "lg";
 export type Density = "compact" | "comfortable" | "spacious";
 export type Alignment = "left" | "center" | "justify";
@@ -36,6 +36,11 @@ export const themeColors = {
     background: "#E8E4E0",
     text: "#4A4642",
     accent: "#9B8B7E",
+  },
+  appleNotes: {
+    background: "#FFFFFF",
+    text: "#1D1D1F",
+    accent: "#E5B107",
   },
 };
 
