@@ -187,6 +187,8 @@ interface RenderContext {
   contentWidthReduction: number;
   // 校准系数：从真实测量获得
   calibrationFactor: number;
+  // 模板配置
+  template: ReturnType<typeof getTemplate>;
 }
 
 function getRenderContext(options: PaginationOptions): RenderContext {
@@ -219,6 +221,7 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     extraTopSpace,
     contentWidthReduction,
     calibrationFactor: 1.0, // 默认值
+    template,
   };
 
   // 用真实测量校准
@@ -387,8 +390,15 @@ function calculatePagesByHeight(
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用 60% 的可用高度（继续减少丢字）
-  const safeAvailableHeight = availableHeight * 0.60;
+  // 根据模板类型调整安全边距
+  let safeMargin = 0.60; // 默认
+  if (context.template.id === "dark") {
+    safeMargin = 0.55; // dark 模板有 QuoteIcon 占用右上角空间
+  } else if (context.template.decoration === "sketch") {
+    safeMargin = 0.55; // sketch 模板有装饰占用空间
+  }
+
+  const safeAvailableHeight = availableHeight * safeMargin;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;

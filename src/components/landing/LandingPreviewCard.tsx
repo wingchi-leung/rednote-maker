@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import previewImage from "@/public/image.png";
 
 export function LandingPreviewCard() {
   return (
@@ -15,10 +16,10 @@ export function LandingPreviewCard() {
         <div className="flex justify-center">
           <div className="w-full max-w-[280px] rounded-2xl overflow-hidden shadow-xl shadow-black/8 border border-apple-border">
             <Image
-              src="/image.png"
+              src={previewImage}
               alt="RedNoteMaker 编辑与预览界面示意"
-              width={840}
-              height={1120}
+              width={previewImage.width}
+              height={previewImage.height}
               className="w-full h-auto object-cover"
               style={{ aspectRatio: "3/4" }}
               priority
