@@ -9,6 +9,9 @@
 
 export type TemplateLayout = "default" | "appleNotes";
 
+/** 卡片背景装饰：sketch = 白底 + 有机线条 + 细微网格，线条色用 colors.accent */
+export type TemplateDecoration = "sketch";
+
 export interface TemplateColors {
   background: string;
   text: string;
@@ -21,6 +24,8 @@ export interface TemplateConfig {
   colors: TemplateColors;
   layout: TemplateLayout;
   codeBackground?: string;
+  /** 启用后卡片会渲染有机线条+网格背景，线条颜色为 accent */
+  decoration?: TemplateDecoration;
 }
 
 export const TEMPLATES: readonly TemplateConfig[] = [
@@ -74,6 +79,39 @@ export const TEMPLATES: readonly TemplateConfig[] = [
       accent: "#E5B107",
     },
     layout: "appleNotes",
+  },
+  {
+    id: "sketchGreen",
+    label: "轻线条·绿",
+    colors: {
+      background: "#FFFFFF",
+      text: "#1D1D1F",
+      accent: "#6BB88A",
+    },
+    layout: "default",
+    decoration: "sketch",
+  },
+  {
+    id: "sketchCyan",
+    label: "轻线条·青",
+    colors: {
+      background: "#FFFFFF",
+      text: "#1D1D1F",
+      accent: "#6BB5BA",
+    },
+    layout: "default",
+    decoration: "sketch",
+  },
+  {
+    id: "sketchPink",
+    label: "轻线条·粉",
+    colors: {
+      background: "#FFFFFF",
+      text: "#1D1D1F",
+      accent: "#D99AAF",
+    },
+    layout: "default",
+    decoration: "sketch",
   },
 ] as const;
 

@@ -12,7 +12,8 @@ import {
   fontSizes,
   densitySpacing,
 } from "@/store/useContentThemeStore";
-import { getTemplateLayout, getCodeBackground } from "@/lib/templates";
+import { getTemplate, getTemplateLayout, getCodeBackground } from "@/lib/templates";
+import { SketchBackground } from "@/features/preview/SketchBackground";
 import { calculatePages } from "@/lib/pagination";
 import { CARD_CONFIG } from "@/lib/constants";
 import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
@@ -192,35 +193,13 @@ export function ImagePreview() {
     const displayStyle = isVisible ? {} : { display: "none" };
 
     const layout = getTemplateLayout(theme);
+    const template = getTemplate(theme);
     const hasCustomHeader = layout === "appleNotes";
+    const hasSketchDecoration = template.decoration === "sketch";
     const codeBg = getCodeBackground(theme);
-    return (
-      <div
-        key={index}
-        ref={(el) => {
-          exportRefs.current[index] = el;
-        }}
-        className="card-content rounded-lg"
-        style={{
-          backgroundColor: currentColors.background,
-          color: currentColors.text,
-          fontSize: currentFontSize,
-          padding: hasCustomHeader ? 0 : currentDensity.padding,
-          lineHeight: currentDensity.lineHeight,
-          textAlign: alignment,
-          width: "100%",
-          minHeight: "100%",
-          maxHeight: "100%",
-          boxSizing: "border-box",
-          overflowWrap: "break-word",
-          wordBreak: "break-word",
-          overflowX: "hidden",
-          overflowY: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          ...displayStyle,
-        }}
-      >
+
+    const cardContent = (
+      <>
         {layout === "appleNotes" && (
           <CardHeaderAppleNotes accentColor={currentColors.accent} />
         )}
@@ -272,6 +251,71 @@ export function ImagePreview() {
           {pageContent || "*空页面*"}
         </ReactMarkdown>
         </div>
+      </>
+    );
+
+    const contentStyle: React.CSSProperties = {
+      color: currentColors.text,
+      fontSize: currentFontSize,
+      padding: hasCustomHeader ? 0 : currentDensity.padding,
+      lineHeight: currentDensity.lineHeight,
+      textAlign: alignment,
+      width: "100%",
+      minHeight: "100%",
+      maxHeight: "100%",
+      boxSizing: "border-box",
+      overflowWrap: "break-word",
+      wordBreak: "break-word",
+      overflowX: "hidden",
+      overflowY: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      ...displayStyle,
+    };
+
+    if (hasSketchDecoration) {
+      return (
+        <div
+          key={index}
+          ref={(el) => {
+            exportRefs.current[index] = el;
+          }}
+          className="card-content rounded-lg"
+          style={{ position: "relative", ...contentStyle }}
+        >
+          <div
+            className="absolute inset-0 rounded-lg"
+            style={{ backgroundColor: currentColors.background, zIndex: 0 }}
+            aria-hidden
+          />
+          <SketchBackground accentColor={currentColors.accent} />
+          <div
+            style={{
+              ...contentStyle,
+              position: "relative",
+              zIndex: 1,
+              backgroundColor: "transparent",
+            }}
+          >
+            {cardContent}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={index}
+        ref={(el) => {
+          exportRefs.current[index] = el;
+        }}
+        className="card-content rounded-lg"
+        style={{
+          ...contentStyle,
+          backgroundColor: currentColors.background,
+        }}
+      >
+        {cardContent}
       </div>
     );
   };
@@ -396,7 +440,6 @@ export function ImagePreview() {
               }}
             >
               {isExporting ? (
-            // Render all pages for export
             <div className="absolute inset-0">
               {pages.map((page, index) => (
                 <div
@@ -404,72 +447,10 @@ export function ImagePreview() {
                   ref={(el) => {
                     exportRefs.current[index] = el;
                   }}
-                  className="card-content"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    backgroundColor: currentColors.background,
-                    color: currentColors.text,
-                    fontSize: currentFontSize,
-                    padding: currentDensity.padding,
-                    lineHeight: currentDensity.lineHeight,
-                    textAlign: alignment,
-                    boxSizing: "border-box",
-                    overflowX: "hidden",
-                    overflowY: "hidden",
-                    overflowWrap: "break-word",
-                    wordBreak: "break-word",
-                  }}
+                  className="absolute inset-0"
+                  style={{ width: "100%", height: "100%" }}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      h1: ({ children }) => (
-                        <h1 className="text-3xl font-bold mb-2 mt-0">
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-2xl font-bold mb-2 mt-4">
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-xl font-bold mb-1.5 mt-3">
-                          {children}
-                        </h3>
-                      ),
-                      p: ({ children }) => (
-                        <p className="mb-2" style={{ lineHeight: "inherit" }}>{children}</p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="mb-2 pl-6 list-disc">{children}</ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="mb-2 pl-6 list-decimal">{children}</ol>
-                      ),
-                      li: ({ children }) => <li className="mb-0.5">{children}</li>,
-                      code: ({ children }) => (
-                        <code
-                          className="px-1 py-0.5 rounded text-sm"
-                          style={{
-                            backgroundColor: getCodeBackground(theme),
-                          }}
-                        >
-                          {children}
-                        </code>
-                      ),
-                      strong: ({ children }) => (
-                        <strong className="font-bold">{children}</strong>
-                      ),
-                      em: ({ children }) => <em className="italic">{children}</em>,
-                    }}
-                  >
-                    {page || "*空页面*"}
-                  </ReactMarkdown>
+                  {renderPage(page, index, true)}
                 </div>
               ))}
             </div>
