@@ -137,33 +137,37 @@ function createRenderContext(options: PaginationOptions): RenderContext {
   const template = getTemplate(options.theme);
   const colors = template.colors;
 
-  // 计算可用高度（考虑 padding 和模板头部）
+  // 计算可用高度
   const layout = template.layout;
   const hasCustomHeader = layout === "appleNotes";
   const cardFrame = template.cardFrame;
 
   let availableHeight = CARD_CONFIG.height;
-  let extraTopSpace = 0;
-
-  // appleNotes 布局头部高度
-  if (hasCustomHeader) {
-    const headerPadding = DENSITY_CONFIG[options.density].padding;
-    extraTopSpace += headerPadding * 2 + 25; // 25px 是头部内容高度
-  }
 
   // cardFrame 顶线和上边距
   if (cardFrame?.topLine) {
-    extraTopSpace += 1; // 顶线
-    extraTopSpace += 24; // marginTop
+    availableHeight -= 1; // 顶线
+    availableHeight -= 24; // marginTop
   }
 
-  // 内容区域的 padding
-  const contentPadding = hasCustomHeader ? 0 : DENSITY_CONFIG[options.density].padding;
-  availableHeight -= contentPadding * 2;
-  availableHeight -= extraTopSpace;
+  // appleNotes 头部大约高度
+  if (hasCustomHeader) {
+    availableHeight -= 50; // 头部高度
+  }
+
+  // 内容区域的 padding（测量 wrapper 的 padding）
+  const contentPadding = DENSITY_CONFIG[options.density].padding;
+  if (hasCustomHeader) {
+    // appleNotes 有 padding
+    availableHeight -= contentPadding * 2;
+  } else if (!cardFrame) {
+    // 默认布局也有 padding
+    availableHeight -= contentPadding * 2;
+  }
+  // cardFrame 布局没有额外的上下 padding（只有左右边距）
 
   return {
-    container: null as any, // 稍后初始化
+    container: null as any,
     availableHeight,
     theme: options.theme,
     fontSize: options.fontSize,
@@ -190,7 +194,7 @@ function escapeHtml(text: string): string {
  * 将内联 Markdown 转换为 HTML（处理粗体、斜体、代码、高亮等）
  */
 function convertInlineMarkdown(text: string, context: RenderContext): string {
-  const { colors, template } = context;
+  const { colors } = context;
   const codeBg = getCodeBackground(context.theme);
   const accentColor = colors.accent;
   const bgColor = colors.background;
@@ -226,43 +230,26 @@ function convertInlineMarkdown(text: string, context: RenderContext): string {
  * 尽量模拟 ReactMarkdown + Tailwind 的渲染效果
  */
 function markdownToSimpleHTML(markdown: string, context: RenderContext): string {
-  const { colors, template } = context;
+  const { template, colors } = context;
   const codeBg = getCodeBackground(context.theme);
   const blockquoteColor = template.blockquoteColor || colors.accent;
-  const accentColor = colors.accent;
 
   const lines = markdown.split("\n");
   const result: string[] = [];
   let inCodeBlock = false;
   let codeContent = "";
-  let inParagraph = false;
-  let paragraphLines: string[] = [];
-
-  // 辅助函数：结束当前段落
-  const endParagraph = () => {
-    if (inParagraph && paragraphLines.length > 0) {
-      const text = paragraphLines.join(" ");
-      const converted = convertInlineMarkdown(text, context);
-      result.push(`<p style="margin: 0 0 8px 0; line-height: inherit;">${converted}</p>`);
-    }
-    inParagraph = false;
-    paragraphLines = [];
-  };
 
   for (const line of lines) {
     const trimmed = line.trim();
 
     // 处理代码块
     if (trimmed.startsWith("```")) {
-      endParagraph();
       if (inCodeBlock) {
-        // 结束代码块
         const escaped = escapeHtml(codeContent.trim());
         result.push(`<pre style="background: rgba(0,0,0,0.05); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 8px 0; font-size: 14px; line-height: 1.5;"><code style="font-family: monospace;">${escaped}</code></pre>`);
         codeContent = "";
         inCodeBlock = false;
       } else {
-        // 开始代码块
         inCodeBlock = true;
       }
       continue;
@@ -273,16 +260,14 @@ function markdownToSimpleHTML(markdown: string, context: RenderContext): string 
       continue;
     }
 
-    // 空行：结束段落
+    // 空行
     if (!trimmed) {
-      endParagraph();
       continue;
     }
 
     // 标题
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
-      endParagraph();
       const level = headingMatch[1].length;
       const text = convertInlineMarkdown(headingMatch[2], context);
       let style = "";
@@ -299,7 +284,6 @@ function markdownToSimpleHTML(markdown: string, context: RenderContext): string 
 
     // 引用
     if (trimmed.startsWith("> ")) {
-      endParagraph();
       const text = convertInlineMarkdown(trimmed.slice(2), context);
       result.push(`<blockquote style="border-left: 4px solid ${blockquoteColor}; padding-left: 12px; padding-top: 4px; padding-bottom: 4px; margin: 8px 0; font-style: italic; opacity: 0.9;">${text}</blockquote>`);
       continue;
@@ -309,34 +293,23 @@ function markdownToSimpleHTML(markdown: string, context: RenderContext): string 
     const listMatch = trimmed.match(/^[\*\-]\s+(.+)$/);
     const orderedListMatch = trimmed.match(/^\d+\.\s+(.+)$/);
     if (listMatch || orderedListMatch) {
-      if (!inParagraph) {
-        // 开始新段落累积列表项
-        inParagraph = true;
-      }
       const text = convertInlineMarkdown(listMatch ? listMatch[1] : orderedListMatch![1], context);
-      paragraphLines.push(`<li style="margin-bottom: 2px;">${text}</li>`);
+      result.push(`<li style="margin-bottom: 2px;">${text}</li>`);
       continue;
     }
 
-    // 普通文本行
-    if (!inParagraph) {
-      inParagraph = true;
-    }
-    paragraphLines.push(trimmed);
+    // 普通文本行 - 转为段落
+    const text = convertInlineMarkdown(trimmed, context);
+    result.push(`<p style="margin: 0 0 8px 0; line-height: inherit;">${text}</p>`);
   }
-
-  // 结束最后的段落
-  endParagraph();
 
   // 将连续的 li 包装在 ul 中
   const finalResult: string[] = [];
   for (const line of result) {
     if (line.trim().startsWith("<li>")) {
       if (finalResult.length > 0 && finalResult[finalResult.length - 1].startsWith("<ul")) {
-        // 添加到现有的 ul
         finalResult[finalResult.length - 1] = finalResult[finalResult.length - 1].replace("</ul>", "") + line + "</ul>";
       } else {
-        // 创建新的 ul
         finalResult.push(`<ul style="margin: 0 0 8px 0; padding-left: 24px; list-style-type: disc;">${line}</ul>`);
       }
     } else {
@@ -351,24 +324,19 @@ function markdownToSimpleHTML(markdown: string, context: RenderContext): string 
  * 将 Markdown 渲染到测量容器并返回实际高度
  */
 function renderMarkdownToMeasure(markdown: string, context: RenderContext): number {
-  // 确保测量容器已初始化
   initMeasureContainer(context);
 
   if (!measureWrapper) {
     throw new Error("Measure wrapper not initialized");
   }
 
-  // 清空并渲染
   measureWrapper.innerHTML = "";
   const html = markdownToSimpleHTML(markdown, context);
   measureWrapper.innerHTML = html || "<p style='line-height: inherit; margin: 0;'>*空页面*</p>";
 
-  // 强制浏览器计算布局
   measureContainer!.offsetHeight;
 
-  // 获取实际高度
   const height = measureWrapper.scrollHeight;
-
   return height;
 }
 
@@ -383,9 +351,6 @@ interface ContentBlock {
   rawLine: string;
 }
 
-/**
- * 解析 Markdown 为内容块
- */
 function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
   const lines = markdown.split("\n");
   const blocks: ContentBlock[] = [];
@@ -393,15 +358,12 @@ function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
   let codeContent = "";
 
   for (const line of lines) {
-    // 处理代码块
     if (line.trim().startsWith("```")) {
       if (inCodeBlock) {
-        // 结束代码块
         blocks.push({ type: "code", content: codeContent.trim(), rawLine: codeContent.trim() });
         codeContent = "";
         inCodeBlock = false;
       } else {
-        // 开始代码块
         inCodeBlock = true;
       }
       continue;
@@ -413,7 +375,6 @@ function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
     }
 
     const trimmed = line.trim();
-
     if (!trimmed) {
       blocks.push({ type: "empty", content: "", rawLine: "" });
       continue;
@@ -438,7 +399,6 @@ function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
     blocks.push({ type: "paragraph", content: line, rawLine: line });
   }
 
-  // 处理未闭合的代码块
   if (inCodeBlock && codeContent.trim()) {
     blocks.push({ type: "code", content: codeContent.trim(), rawLine: codeContent.trim() });
   }
@@ -446,9 +406,6 @@ function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
   return blocks;
 }
 
-/**
- * 将块转回 Markdown
- */
 function blocksToMarkdown(blocks: ContentBlock[]): string {
   return blocks
     .map((block) => {
@@ -464,9 +421,6 @@ function blocksToMarkdown(blocks: ContentBlock[]): string {
     .join("\n");
 }
 
-/**
- * 按自定义分页符拆分内容
- */
 function splitByPageBreak(content: string): string[] {
   const trimmed = content.trim();
   if (!trimmed) return [""];
@@ -478,10 +432,6 @@ function splitByPageBreak(content: string): string[] {
   return segments.length > 0 ? segments : [""];
 }
 
-/**
- * 使用二分查找找到最佳拆分点
- * 用于处理单个超大块
- */
 function findSplitPointBinary(
   block: ContentBlock,
   context: RenderContext,
@@ -496,7 +446,6 @@ function findSplitPointBinary(
     return [block];
   }
 
-  // 二分查找找到合适的分割点
   let left = 1;
   let right = lines.length;
   let bestSplit = lines.length;
@@ -519,15 +468,10 @@ function findSplitPointBinary(
     }
   }
 
-  if (bestSplit >= lines.length) {
+  if (bestSplit >= lines.length || bestSplit <= 0) {
     return [block];
   }
 
-  if (bestSplit <= 0) {
-    return [block];
-  }
-
-  // 在最佳分割点附近找更好的边界（句子结尾、段落等）
   const splitIndex = findBetterSplitPoint(lines, bestSplit);
   const firstPart = lines.slice(0, splitIndex).join("\n");
   const secondPart = lines.slice(splitIndex).join("\n").trimStart();
@@ -543,18 +487,13 @@ function findSplitPointBinary(
   return result;
 }
 
-/**
- * 在二分结果附近找更好的分割点（句子、段落边界）
- */
 function findBetterSplitPoint(lines: string[], idealIndex: number): number {
-  // 优先在空行处分割
   for (let i = idealIndex; i > idealIndex - 3 && i > 0; i--) {
     if (lines[i - 1]?.trim() === "") {
       return i;
     }
   }
 
-  // 在句子结尾处分割（中文或英文句号）
   for (let i = idealIndex; i > idealIndex - 5 && i > 0; i--) {
     const line = lines[i - 1] || "";
     if (/[。！？.!?]$/.test(line.trim())) {
@@ -562,7 +501,6 @@ function findBetterSplitPoint(lines: string[], idealIndex: number): number {
     }
   }
 
-  // 在逗号处分割
   for (let i = idealIndex; i > idealIndex - 3 && i > 0; i--) {
     const line = lines[i - 1] || "";
     if (/[，,]$/.test(line.trim())) {
@@ -573,9 +511,6 @@ function findBetterSplitPoint(lines: string[], idealIndex: number): number {
   return idealIndex;
 }
 
-/**
- * 核心分页算法：基于实际渲染高度
- */
 function paginateByActualHeight(
   markdown: string,
   context: RenderContext
@@ -584,37 +519,31 @@ function paginateByActualHeight(
   const pages: ContentBlock[][] = [];
   const { availableHeight } = context;
 
-  // 使用实际可用高度的 95% 作为安全边距
-  const safeHeight = Math.floor(availableHeight * 0.95);
+  // 使用 85% 作为安全边距（更保守）
+  const safeHeight = Math.floor(availableHeight * 0.85);
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentHeight = 0;
 
   for (const block of blocks) {
-    // 跳过空块
     if (block.type === "empty") {
       continue;
     }
 
-    // 先测试当前块是否单独超过一页
     const singleBlockHeight = renderMarkdownToMeasure(
       blocksToMarkdown([block]),
       context
     );
 
     if (singleBlockHeight > safeHeight) {
-      // 当前块太大，需要拆分
-      // 先保存当前页（如果有内容）
       if (currentPageBlocks.length > 0) {
         pages.push(currentPageBlocks);
         currentPageBlocks = [];
         currentHeight = 0;
       }
 
-      // 拆分超大块
       const splitChunks = findSplitPointBinary(block, context, safeHeight);
 
-      // 处理拆分后的块
       for (const chunk of splitChunks) {
         const chunkHeight = renderMarkdownToMeasure(
           blocksToMarkdown([chunk]),
@@ -633,7 +562,6 @@ function paginateByActualHeight(
       continue;
     }
 
-    // 测试加入当前块后的总高度
     const testBlocks = [...currentPageBlocks, block];
     const testHeight = renderMarkdownToMeasure(
       blocksToMarkdown(testBlocks),
@@ -641,12 +569,10 @@ function paginateByActualHeight(
     );
 
     if (testHeight > safeHeight && currentPageBlocks.length > 0) {
-      // 特殊处理：标题和内容不要分离（如果当前页内容很少）
       if (block.type === "heading" && currentHeight < safeHeight * 0.3) {
         currentPageBlocks.push(block);
         currentHeight = testHeight;
       } else {
-        // 开始新的一页
         pages.push(currentPageBlocks);
         currentPageBlocks = [block];
         currentHeight = singleBlockHeight;
@@ -664,16 +590,6 @@ function paginateByActualHeight(
   return pages.length > 0 ? pages : [[]];
 }
 
-// ============================================================================
-// 主入口
-// ============================================================================
-
-/**
- * 计算分页
- * @param markdown - Markdown 内容
- * @param options - 分页选项（密度、字号、主题）
- * @returns 分页后的 Markdown 字符串数组
- */
 export function calculatePages(
   markdown: string,
   options?: PaginationOptions | number
@@ -682,14 +598,11 @@ export function calculatePages(
     return [""];
   }
 
-  // SSR 环境下返回原始内容（不分页）
   if (!isBrowser) {
-    // 按自定义分页符拆分
     const segments = splitByPageBreak(markdown);
     return segments.length > 0 ? segments : [markdown];
   }
 
-  // 兼容旧调用
   let paginationOptions: PaginationOptions;
   if (typeof options === "number") {
     paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
@@ -699,7 +612,6 @@ export function calculatePages(
     paginationOptions = options;
   }
 
-  // 按自定义分页符拆分
   const segments = splitByPageBreak(markdown);
   const allPages: string[][] = [];
   const context = createRenderContext(paginationOptions);
