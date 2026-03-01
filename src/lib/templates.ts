@@ -59,7 +59,6 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     },
     layout: "default",
     codeBackground: "rgba(255,255,255,0.08)",
-    blockquoteColor: "#A884EE",
   },
   {
     id: "parchment",
