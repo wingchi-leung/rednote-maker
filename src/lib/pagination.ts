@@ -273,7 +273,7 @@ function estimateBlockHeight(
           totalHeight += lineHeight * textLines;
         }
       }
-      estimatedHeight = totalHeight + fontSize * 0.75;
+      estimatedHeight = totalHeight + fontSize * 0.9;
       break;
     }
 
@@ -288,7 +288,7 @@ function estimateBlockHeight(
     case "code": {
       const codeLineHeight = fontSize * 1.5;
       const lines = block.content.split("\n").length;
-      estimatedHeight = codeLineHeight * lines + fontSize * 0.75;
+      estimatedHeight = codeLineHeight * lines + fontSize * 0.9;
       break;
     }
 
@@ -333,7 +333,7 @@ function splitOversizedBlock(
   const chunks: ContentBlock[] = [];
 
   const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * context.lineHeightRatio));
-  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.65);
+  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.7);
 
   if (charsPerPage < 30) {
     return [block];
@@ -387,8 +387,8 @@ function calculatePagesByHeight(
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用 70% 的可用高度（经过校准后可以更激进）
-  const safeAvailableHeight = availableHeight * 0.70;
+  // 使用 65% 的可用高度（更激进）
+  const safeAvailableHeight = availableHeight * 0.65;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
