@@ -9,11 +9,11 @@ import { CARD_CONFIG } from "@/lib/constants";
 
 export function ExportOptions() {
   const { content } = useMarkdownContentStore();
-  const { density, fontSize } = useContentThemeStore();
+  const { density, fontSize, theme } = useContentThemeStore();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
 
-  const pages = useMemo(() => calculatePages(content, { density, fontSize }), [content, density, fontSize]);
+  const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
 
   const handleExport = () => {
     if (pages.length === 0) return;

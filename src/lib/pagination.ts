@@ -1,9 +1,10 @@
 /**
- * 基于实际渲染参数的智能分页算法
- * 根据用户选择的密度、字号等设置精确计算每页可容纳的内容
+ * 基于实际渲染参数和模板样式的智能分页算法
+ * 彻底解决分页丢字问题
  */
 
 import { CARD_CONFIG } from "./constants";
+import { getTemplate, type Theme } from "./templates";
 
 // 导出类型供外部使用
 export type { ContentBlock };
@@ -27,6 +28,7 @@ export type FontSize = "sm" | "md" | "lg";
 export interface PaginationOptions {
   density: Density;
   fontSize: FontSize;
+  theme: Theme;
 }
 
 // 密度配置：padding 和 lineHeight
@@ -41,6 +43,16 @@ const FONT_SIZE_CONFIG = {
   sm: 14,
   md: 16,
   lg: 18,
+} as const;
+
+// 模板额外高度配置（像素）
+const TEMPLATE_EXTRA_HEIGHT = {
+  // appleNotes 布局有头部：padding 12px*2 + 内容约 25px = ~50px
+  appleNotesHeader: 50,
+  // cardFrame 顶部有 marginTop: 24px
+  cardFrameTopMargin: 24,
+  // cardFrame 顶线：1px
+  cardFrameTopLine: 1,
 } as const;
 
 // ============================================================================
@@ -121,13 +133,44 @@ function blocksToMarkdown(blocks: ContentBlock[]): string {
 // 高度计算核心
 // ============================================================================
 
+interface RenderContext {
+  cardWidth: number;
+  cardHeight: number;
+  padding: number;
+  fontSize: number;
+  lineHeight: number;
+  lineHeightRatio: number;
+  // 额外减少的高度（模板头部、cardFrame等）
+  extraTopSpace: number;
+  // 内容宽度缩减（cardFrame 的 sideMargin）
+  contentWidthReduction: number;
+}
+
 /**
- * 计算渲染上下文：基于用户选择的密度和字号
+ * 计算渲染上下文：基于用户选择的密度、字号和模板
  */
-function getRenderContext(options: PaginationOptions) {
+function getRenderContext(options: PaginationOptions): RenderContext {
   const densityConfig = DENSITY_CONFIG[options.density];
   const fontSize = FONT_SIZE_CONFIG[options.fontSize];
   const lineHeight = fontSize * densityConfig.lineHeightRatio;
+  const template = getTemplate(options.theme);
+
+  let extraTopSpace = 0;
+  let contentWidthReduction = 0;
+
+  // appleNotes 布局有头部
+  if (template.layout === "appleNotes") {
+    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.appleNotesHeader;
+  }
+
+  // cardFrame 有顶线和上边距
+  if (template.cardFrame?.topLine) {
+    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopLine;
+    extraTopSpace += TEMPLATE_EXTRA_HEIGHT.cardFrameTopMargin;
+    // cardFrame 有左右边距百分比
+    const sideMarginPercent = template.cardFrame.sideMarginPercent || 0;
+    contentWidthReduction = (CARD_CONFIG.width * sideMarginPercent * 2) / 100;
+  }
 
   return {
     cardWidth: CARD_CONFIG.width,
@@ -136,47 +179,49 @@ function getRenderContext(options: PaginationOptions) {
     fontSize,
     lineHeight,
     lineHeightRatio: densityConfig.lineHeightRatio,
+    extraTopSpace,
+    contentWidthReduction,
   };
 }
 
 /**
- * 计算可用内容高度（减去 padding 后）
+ * 计算可用内容高度
  */
-function getAvailableContentHeight(context: ReturnType<typeof getRenderContext>): number {
-  return context.cardHeight - context.padding * 2;
+function getAvailableContentHeight(context: RenderContext): number {
+  return context.cardHeight - context.padding * 2 - context.extraTopSpace;
 }
 
 /**
  * 精确估算块的高度（像素）
- * 基于实际的字号、行高、padding设置
+ * 极度保守，确保不溢出
  */
 function estimateBlockHeight(
   block: ContentBlock,
-  context: ReturnType<typeof getRenderContext>
+  context: RenderContext
 ): number {
-  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio } = context;
+  const { cardWidth, padding, fontSize, lineHeight, lineHeightRatio, contentWidthReduction } = context;
 
-  // 可用内容宽度
-  const contentWidth = cardWidth - padding * 2;
+  // 可用内容宽度（考虑 cardFrame 的左右边距）
+  const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
 
-  // 根据字号估算每行容纳字符数（中文按 1.2 倍宽度，英文按 0.6 倍）
-  const avgCharWidth = fontSize * 0.6; // 平均字符宽度
+  // 保守估算字符宽度（按较大值计算）
+  const avgCharWidth = fontSize * 0.65; // 略大的值，更保守
   const charsPerLine = Math.floor(contentWidth / avgCharWidth);
 
   switch (block.type) {
     case "heading": {
       const level = block.level || 1;
-      // 标题字号更大：h1 = fontSize * 2, h2 = fontSize * 1.75, h3 = fontSize * 1.5
+      // 标题字号更大
       const headingFontSize = fontSize * (level === 1 ? 2 : level === 2 ? 1.75 : 1.5);
       const headingLineHeight = headingFontSize * lineHeightRatio;
 
-      // 估算标题换行
-      const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.6));
+      // 估算标题换行（保守估计）
+      const headingCharsPerLine = Math.floor(contentWidth / (headingFontSize * 0.65));
       const lines = Math.max(1, Math.ceil(block.content.length / headingCharsPerLine));
 
-      // 标题上下边距
-      const marginBottom = fontSize * 0.75; // 下边距
-      const marginTop = level === 1 ? 0 : fontSize * 1; // h1 无上边距，其他有
+      // 标题上下边距（保守估计）
+      const marginBottom = fontSize;
+      const marginTop = level === 1 ? fontSize * 0.5 : fontSize * 1.2;
 
       return headingLineHeight * lines + marginBottom + marginTop;
     }
@@ -187,34 +232,33 @@ function estimateBlockHeight(
 
       for (const line of lines) {
         if (!line.trim()) {
-          // 空行占一行
           totalHeight += lineHeight;
         } else {
-          // 估算这行文字会占用多少行
+          // 保守估算换行
           const textLines = Math.max(1, Math.ceil(line.length / charsPerLine));
           totalHeight += lineHeight * textLines;
         }
       }
 
-      // 段落下边距
-      return totalHeight + fontSize * 0.5;
+      // 段落下边距（保守）
+      return totalHeight + fontSize * 0.75;
     }
 
     case "list": {
-      // 列表有左边距（约 24px）
-      const listContentWidth = contentWidth - 24;
+      // 列表有左边距
+      const listContentWidth = contentWidth - 28; // 略大的左边距
       const listCharsPerLine = Math.floor(listContentWidth / avgCharWidth);
       const lines = Math.max(1, Math.ceil(block.content.length / listCharsPerLine));
 
-      // 列表项上下间距略小
-      return lineHeight * lines + fontSize * 0.25;
+      // 列表项间距（保守）
+      return lineHeight * lines + fontSize * 0.5;
     }
 
     case "code": {
-      // 代码块用等宽字体，行高略小
-      const codeLineHeight = fontSize * 1.4;
+      // 代码块用等宽字体，行高略小（保守估计）
+      const codeLineHeight = fontSize * 1.5;
       const lines = block.content.split("\n").length;
-      return codeLineHeight * lines + fontSize * 0.5;
+      return codeLineHeight * lines + fontSize * 0.75;
     }
 
     case "empty": {
@@ -232,12 +276,12 @@ function estimateBlockHeight(
 
 /**
  * 将超高的块拆分成多个可放入单页的块
- * 只拆分段落和列表
+ * 极度保守的拆分策略
  */
 function splitOversizedBlock(
   block: ContentBlock,
   maxAvailableHeight: number,
-  context: ReturnType<typeof getRenderContext>
+  context: RenderContext
 ): ContentBlock[] {
   const blockHeight = estimateBlockHeight(block, context);
 
@@ -247,26 +291,22 @@ function splitOversizedBlock(
 
   // 只拆分段落和列表
   if (block.type !== "paragraph" && block.type !== "list") {
-    // 其他类型如果太高，就让它独占一页（可能会有溢出，但比强行拆分好）
     return [block];
   }
 
-  const { cardWidth, padding, fontSize } = context;
-  const contentWidth = cardWidth - padding * 2;
-  const avgCharWidth = fontSize * 0.6;
+  const { cardWidth, padding, fontSize, contentWidthReduction } = context;
+  const contentWidth = cardWidth - padding * 2 - contentWidthReduction;
+  const avgCharWidth = fontSize * 0.65;
   const charsPerLine = Math.floor(contentWidth / avgCharWidth);
 
   const content = block.content;
   const chunks: ContentBlock[] = [];
 
-  // 计算每页大概能放多少字符
-  // 高度 ÷ 行高 = 可用行数
+  // 极度保守：每页只放 60% 的理论容量
   const linesPerPage = Math.floor(maxAvailableHeight / (fontSize * 1.75));
-  // 每行字符数 × 行数 = 每页字符数（保守估计，乘以 0.8）
-  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.7);
+  const charsPerPage = Math.floor(charsPerLine * linesPerPage * 0.5);
 
-  if (charsPerPage < 50) {
-    // 太小了，不拆分
+  if (charsPerPage < 30) {
     return [block];
   }
 
@@ -282,20 +322,19 @@ function splitOversizedBlock(
 
     // 优先在换行符处分割
     const nextNewLine = remaining.indexOf("\n", splitAt);
-    if (nextNewLine > 0 && nextNewLine <= remaining.length * 0.9) {
+    if (nextNewLine > 0 && nextNewLine <= remaining.length * 0.85) {
       splitAt = nextNewLine + 1;
     } else {
       // 在标点符号处分割
       const punctuation = /[。！？.!?，,；;]/;
       let found = false;
-      for (let i = splitAt; i > splitAt - 80 && i > 0; i--) {
+      for (let i = splitAt; i > splitAt - 100 && i > 0; i--) {
         if (punctuation.test(remaining[i])) {
           splitAt = i + 1;
           found = true;
           break;
         }
       }
-      // 最后在空格处分割
       if (!found) {
         const space = remaining.lastIndexOf(" ", splitAt);
         if (space > splitAt / 2) {
@@ -316,16 +355,17 @@ function splitOversizedBlock(
 
 /**
  * 基于高度的分页算法
+ * 极度保守，确保不丢字
  */
 function calculatePagesByHeight(
   blocks: ContentBlock[],
-  context: ReturnType<typeof getRenderContext>
+  context: RenderContext
 ): ContentBlock[][] {
   const pages: ContentBlock[][] = [];
   const availableHeight = getAvailableContentHeight(context);
 
-  // 使用保守值：只使用 85% 的可用高度，留足够的安全边距
-  const safeAvailableHeight = availableHeight * 0.85;
+  // 极度保守：只使用 70% 的可用高度
+  const safeAvailableHeight = availableHeight * 0.7;
 
   let currentPageBlocks: ContentBlock[] = [];
   let currentPageHeight = 0;
@@ -335,14 +375,12 @@ function calculatePagesByHeight(
 
     // 如果单个块就超过一页，需要拆分
     if (blockHeight > safeAvailableHeight) {
-      // 先结束当前页
       if (currentPageBlocks.length > 0) {
         pages.push(currentPageBlocks);
         currentPageBlocks = [];
         currentPageHeight = 0;
       }
 
-      // 拆分超大块
       const splitChunks = splitOversizedBlock(block, safeAvailableHeight, context);
 
       for (const chunk of splitChunks) {
@@ -362,15 +400,13 @@ function calculatePagesByHeight(
     // 检查加入当前块是否会超出一页
     if (currentPageHeight + blockHeight > safeAvailableHeight && currentPageBlocks.length > 0) {
       // 标题特殊处理
-      if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.5) {
+      if (block.type === "heading" && currentPageHeight < safeAvailableHeight * 0.4) {
         currentPageBlocks.push(block);
         currentPageHeight += blockHeight;
-      } else if (currentPageHeight < safeAvailableHeight * 0.15) {
-        // 当前页内容太少，强制放入
+      } else if (currentPageHeight < safeAvailableHeight * 0.1) {
         currentPageBlocks.push(block);
         currentPageHeight += blockHeight;
       } else {
-        // 结束当前页，开始新页
         pages.push(currentPageBlocks);
         currentPageBlocks = [block];
         currentPageHeight = blockHeight;
@@ -381,7 +417,6 @@ function calculatePagesByHeight(
     }
   }
 
-  // 添加最后一页
   if (currentPageBlocks.length > 0) {
     pages.push(currentPageBlocks);
   }
@@ -396,7 +431,7 @@ function calculatePagesByHeight(
 /**
  * 计算分页
  * @param markdown - Markdown 内容
- * @param options - 分页选项（密度、字号）
+ * @param options - 分页选项（密度、字号、主题）
  * @returns 分页后的 Markdown 字符串数组
  */
 export function calculatePages(
@@ -407,22 +442,18 @@ export function calculatePages(
     return [""];
   }
 
-  // 兼容旧调用：如果传入的是 number，使用默认值
+  // 兼容旧调用
   let paginationOptions: PaginationOptions;
   if (typeof options === "number") {
-    paginationOptions = { density: "comfortable", fontSize: "md" };
+    paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
   } else if (!options) {
-    paginationOptions = { density: "comfortable", fontSize: "md" };
+    paginationOptions = { density: "comfortable", fontSize: "md", theme: "classic" };
   } else {
     paginationOptions = options;
   }
 
-  // 按自定义分页符分段
   const segments = splitByPageBreak(markdown);
-
   const allPages: string[][] = [];
-
-  // 获取渲染上下文
   const context = getRenderContext(paginationOptions);
 
   for (const segment of segments) {

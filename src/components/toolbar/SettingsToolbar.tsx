@@ -42,7 +42,7 @@ export function SettingsToolbar() {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
-  const pages = useMemo(() => calculatePages(content, { density, fontSize }), [content, density, fontSize]);
+  const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
   const totalPages = pages.length;
 
   // 同步：当页数变化时，默认全选
