@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
@@ -21,7 +22,18 @@ import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
 import { CardHeaderAppleNotes } from "@/features/preview/CardHeaderAppleNotes";
+import { QuoteIcon } from "@/components/icons/QuoteIcon";
 import html2canvas from "html2canvas";
+
+/** 将 ==高亮== 转为 <mark>，仅处理代码块外的内容 */
+function preprocessHighlight(md: string): string {
+  const parts = md.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part, i) =>
+      i % 2 === 0 ? part.replace(/==([^=]+?)==/g, "<mark>$1</mark>") : part
+    )
+    .join("");
+}
 
 type PreviewViewMode = "pagination" | "list";
 
@@ -197,6 +209,7 @@ export function ImagePreview() {
     const hasCustomHeader = layout === "appleNotes";
     const hasSketchDecoration = template.decoration === "sketch";
     const codeBg = getCodeBackground(theme);
+    const blockquoteColor = template.blockquoteColor ?? currentColors.accent;
 
     const cardContent = (
       <>
@@ -214,6 +227,7 @@ export function ImagePreview() {
         >
           <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
           components={{
             h1: ({ children }) => (
               <h1 className="text-3xl font-bold mb-2 mt-0">{children}</h1>
@@ -243,12 +257,33 @@ export function ImagePreview() {
               </code>
             ),
             strong: ({ children }) => (
-              <strong className="font-bold">{children}</strong>
+              <strong
+                className="font-bold"
+                style={{ color: currentColors.accent }}
+              >
+                {children}
+              </strong>
             ),
             em: ({ children }) => <em className="italic">{children}</em>,
+            mark: ({ children }) => (
+              <mark
+                className="rounded px-0.5 font-medium"
+                style={{ backgroundColor: currentColors.accent, color: currentColors.background }}
+              >
+                {children}
+              </mark>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote
+                className="border-l-4 pl-3 py-1 my-2 italic opacity-90"
+                style={{ borderColor: blockquoteColor }}
+              >
+                {children}
+              </blockquote>
+            ),
           }}
         >
-          {pageContent || "*空页面*"}
+          {preprocessHighlight(pageContent || "*空页面*")}
         </ReactMarkdown>
         </div>
       </>
@@ -303,6 +338,52 @@ export function ImagePreview() {
       );
     }
 
+    const cardFrame = template.cardFrame;
+    if (cardFrame) {
+      const marginPct = `${cardFrame.sideMarginPercent}%`;
+      return (
+        <div
+          key={index}
+          ref={(el) => {
+            exportRefs.current[index] = el;
+          }}
+          className="card-content rounded-lg"
+          style={{
+            ...contentStyle,
+            backgroundColor: currentColors.background,
+          }}
+        >
+          {cardFrame.topLine && (
+            <div
+              style={{
+                height: "1px",
+                backgroundColor: currentColors.accent,
+                width: "100%",
+                flexShrink: 0,
+              }}
+              aria-hidden
+            />
+          )}
+          <div
+            style={{
+              marginLeft: marginPct,
+              marginRight: marginPct,
+              marginTop: cardFrame.topLine ? "24px" : undefined,
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            {cardContent}
+          </div>
+        </div>
+      );
+    }
+
+    const isDefaultDark =
+      theme === "dark" && !hasSketchDecoration && !template.cardFrame;
     return (
       <div
         key={index}
@@ -312,9 +393,22 @@ export function ImagePreview() {
         className="card-content rounded-lg"
         style={{
           ...contentStyle,
+          position: "relative",
           backgroundColor: currentColors.background,
+          ...(isDefaultDark && {
+            boxShadow: "inset 0 0 0 1px rgba(168,132,238,0.15)",
+          }),
         }}
       >
+        {isDefaultDark && (
+          <span
+            className="absolute top-3 right-3"
+            style={{ color: blockquoteColor }}
+            aria-hidden
+          >
+            <QuoteIcon />
+          </span>
+        )}
         {cardContent}
       </div>
     );

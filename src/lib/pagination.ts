@@ -65,20 +65,24 @@ export function parseMarkdownToBlocks(markdown: string): ContentBlock[] {
 }
 
 /**
- * Estimate character count for a content block
+ * 估算块占用的「等效字数」（用于分页），考虑渲染时换行、留白等占用的垂直空间
  */
 export function estimateBlockChars(block: ContentBlock): number {
   switch (block.type) {
     case "heading":
-      return block.content.length + (block.level || 1) * 20;
+      return block.content.length + (block.level || 1) * 28;
     case "code":
-      return block.content.length * 1.5;
+      return block.content.length * 1.8;
     case "list":
-      return block.content.length + 10;
+      return block.content.length + 18;
     case "empty":
-      return 20;
+      return 22;
+    case "paragraph": {
+      const lines = block.content.split("\n").length;
+      return block.content.length + 12 + (lines - 1) * 24;
+    }
     default:
-      return block.content.length + 10;
+      return block.content.length + 12;
   }
 }
 
@@ -98,15 +102,15 @@ function splitOversizedBlock(
     : blocksToMarkdown([block]);
   const chunks: string[] = [];
   let remaining = content;
-  const chunkSize = Math.max(100, maxCharsPerPage - 50);
+  const chunkSize = Math.max(100, Math.floor(maxCharsPerPage * 0.85));
   while (remaining.length > 0) {
-    if (remaining.length <= maxCharsPerPage) {
+    if (remaining.length <= chunkSize) {
       chunks.push(remaining.trim());
       break;
     }
     let splitAt = chunkSize;
     const nextNewLine = remaining.indexOf("\n", chunkSize);
-    if (nextNewLine > 0 && nextNewLine < maxCharsPerPage) {
+    if (nextNewLine > 0 && nextNewLine <= remaining.length) {
       splitAt = nextNewLine + 1;
     } else {
       const space = remaining.lastIndexOf(" ", chunkSize);
@@ -187,7 +191,7 @@ function calculatePagesFromBlocks(
  */
 export function calculatePages(
   markdown: string,
-  maxCharsPerPage: number = 1000
+  maxCharsPerPage: number
 ): string[] {
   const segments = splitByPageBreak(markdown);
   const pages = segments.flatMap((seg) =>

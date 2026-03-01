@@ -18,14 +18,24 @@ export interface TemplateColors {
   accent: string;
 }
 
+/** 卡片框样式：顶部分隔线 + 左右留白，用于莫兰迪等设计感主题 */
+export interface TemplateCardFrame {
+  topLine: boolean;
+  sideMarginPercent: number;
+}
+
 export interface TemplateConfig {
   id: string;
   label: string;
   colors: TemplateColors;
   layout: TemplateLayout;
   codeBackground?: string;
+  /** 引用块边框/强调色，不填则用 colors.accent */
+  blockquoteColor?: string;
   /** 启用后卡片会渲染有机线条+网格背景，线条颜色为 accent */
   decoration?: TemplateDecoration;
+  /** 顶线 + 左右留白，内容不占满全屏 */
+  cardFrame?: TemplateCardFrame;
 }
 
 export const TEMPLATES: readonly TemplateConfig[] = [
@@ -43,12 +53,13 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     id: "dark",
     label: "深空灰",
     colors: {
-      background: "#1C1C1E",
-      text: "#F5F5F7",
-      accent: "#0A84FF",
+      background: "#26262A",
+      text: "#E2E2E8",
+      accent: "#5E9EFF",
     },
     layout: "default",
-    codeBackground: "rgba(255,255,255,0.1)",
+    codeBackground: "rgba(255,255,255,0.08)",
+    blockquoteColor: "#A884EE",
   },
   {
     id: "parchment",
@@ -64,11 +75,12 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     id: "morandi",
     label: "莫兰迪",
     colors: {
-      background: "#E8E4E0",
-      text: "#4A4642",
-      accent: "#9B8B7E",
+      background: "#FFFEF9",
+      text: "#3D3935",
+      accent: "#A8988A",
     },
     layout: "default",
+    cardFrame: { topLine: true, sideMarginPercent: 10 },
   },
   {
     id: "appleNotes",
@@ -82,11 +94,11 @@ export const TEMPLATES: readonly TemplateConfig[] = [
   },
   {
     id: "sketchGreen",
-    label: "轻线条·绿",
+    label: "轻线条·紫",
     colors: {
       background: "#FFFFFF",
       text: "#1D1D1F",
-      accent: "#6BB88A",
+      accent: "#C1A7F3",
     },
     layout: "default",
     decoration: "sketch",

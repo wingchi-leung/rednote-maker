@@ -27,8 +27,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.3",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
-    "remark-mark-plus": "^1.0.21",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
