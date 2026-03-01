@@ -7,9 +7,10 @@ export const CARD_CONFIG = {
 
 export const CARD_RATIO = CARD_CONFIG.width / CARD_CONFIG.height;
 
-/** 单页最大字数：偏保守，避免渲染高度超出卡片导致 overflow 裁切丢字 */
+/** 导出配置：分页现已基于实际渲染高度，不再使用字数限制 */
 export const EXPORT_CONFIG = {
   format: "png" as const,
   quality: 1,
-  maxCharsPerPage: 650,
+  // maxCharsPerPage 已废弃，保留仅为兼容性（分页算法内部不再使用）
+  maxCharsPerPage: 0,
 };
