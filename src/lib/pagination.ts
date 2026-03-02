@@ -252,7 +252,7 @@ function createMeasureComponents() {
         "li",
         {
           className: "mb-0.5",
-          style: { marginTop: 0, marginBottom: 2 },
+          style: { marginTop: 0, marginBottom: 2, paddingLeft: "1.75em", position: "relative" },
         },
         children
       ),
