@@ -480,11 +480,12 @@ function splitSingleOverlongLine(
   }
 
   const splitAt = pickInlineSplitAt(line, best);
-  const head = line.slice(0, splitAt).trimEnd();
-  const tail = line.slice(splitAt).trimStart();
+  // 不要使用 trimEnd/trimStart，它们会删除代码块中的空格！
+  const head = line.slice(0, splitAt);
+  const tail = line.slice(splitAt);
 
   if (!head && tail) {
-    return { head: line[0], tail: line.slice(1).trimStart() };
+    return { head: line[0], tail: line.slice(1) };
   }
 
   return { head, tail };
@@ -497,15 +498,18 @@ function paginateSegmentByMeasurement(
   const pages: string[] = [];
   let lines = segment.split("\n");
 
+  let pageCount = 0;
   while (lines.length > 0) {
-    while (lines.length > 0 && !lines[0].trim()) {
+    // 跳过开头的空行（但不是空格！）
+    while (lines.length > 0 && lines[0].length === 0) {
       lines = lines.slice(1);
     }
     if (lines.length === 0) break;
 
     const full = lines.join("\n");
     if (canFitMarkdown(full, context)) {
-      pages.push(full.trimEnd());
+      // 只删除末尾的空行，不删除空格
+      pages.push(full.replace(/\n+$/, ""));
       break;
     }
 
@@ -532,9 +536,24 @@ function paginateSegmentByMeasurement(
     }
 
     const splitIndex = pickBalancedSplitIndex(lines, bestFit);
-    const page = lines.slice(0, splitIndex).join("\n").trimEnd();
+    const pageLines = lines.slice(0, splitIndex);
+    const remainingLines = lines.slice(splitIndex);
+
+    // 调试：检查是否有内容丢失
+    if (pageCount < 3) {  // 只记录前3页
+      console.log(`[Page ${pageCount + 1}] 取 ${splitIndex}/${lines.length} 行, 剩余 ${remainingLines.length} 行`);
+      console.log(`[Page ${pageCount + 1}] 首行: "${pageLines[0]?.substring(0, 50)}..."`);
+      console.log(`[Page ${pageCount + 1}] 末行: "${pageLines[pageLines.length - 1]?.substring(0, 50)}..."`);
+      if (remainingLines.length > 0) {
+        console.log(`[Page ${pageCount + 1}] 下一页首行: "${remainingLines[0]?.substring(0, 50)}..."`);
+      }
+    }
+
+    // 只删除末尾的空行，不删除空格
+    const page = pageLines.join("\n").replace(/\n+$/, "");
     pages.push(page || "");
-    lines = lines.slice(splitIndex);
+    lines = remainingLines;
+    pageCount++;
   }
 
   return pages.length > 0 ? pages : [""];
@@ -613,7 +632,8 @@ function enforceTextBudgetForPage(page: string, budget: number): string[] {
     }
 
     const split = pickBalancedSplitIndex(lines, best);
-    out.push(lines.slice(0, split).join("\n").trimEnd());
+    // 只删除末尾的空行，不删除空格
+    out.push(lines.slice(0, split).join("\n").replace(/\n+$/, ""));
     lines = lines.slice(split);
   }
 
@@ -650,7 +670,7 @@ function rebalancePages(
 
     while (nextLines.length > 0 && pulled < REBALANCE_MAX_PULL_LINES) {
       const candidateLines = [...currentLines, nextLines[0]];
-      const candidate = candidateLines.join("\n").trimEnd();
+      const candidate = candidateLines.join("\n");
       if (weightedLength(candidate) > maxBudget) break;
       if (!canFitMarkdown(candidate, context)) break;
 
@@ -659,11 +679,13 @@ function rebalancePages(
       pulled++;
     }
 
-    result[i] = currentLines.join("\n").trimEnd();
-    result[i + 1] = nextLines.join("\n").trimStart();
+    // 只删除末尾的空行，不删除空格
+    result[i] = currentLines.join("\n").replace(/\n+$/, "");
+    // 只删除开头的空行，不删除空格（但不能完全删除内容）
+    result[i + 1] = nextLines.length > 0 ? nextLines.join("\n") : "";
   }
 
-  const compact = result.filter((page) => page.trim().length > 0);
+  const compact = result.filter((page) => page.length > 0);
   return compact.length > 0 ? compact : [""];
 }
 
@@ -674,6 +696,10 @@ export function calculatePages(
   if (!markdown.trim()) {
     return [""];
   }
+
+  // 记录输入字符数用于验证
+  const inputLength = markdown.length;
+  const inputLines = markdown.split("\n").length;
 
   const paginationOptions: PaginationOptions =
     typeof options === "number" || !options
@@ -692,6 +718,16 @@ export function calculatePages(
     const budgetedPages = enforceTextBudget(rawPages, budget);
     const pages = rebalancePages(budgetedPages, context, budget);
     allPages.push(...pages);
+  }
+
+  // 验证输出字符数
+  const outputLength = allPages.join("\n").length;
+  const outputLines = allPages.join("\n").split("\n").length;
+
+  // 如果字符数不一致，记录警告
+  if (Math.abs(inputLength - outputLength) > 10) {
+    console.warn(`[Pagination] 字符数不匹配: 输入 ${inputLength} 字符, ${inputLines} 行 -> 输出 ${outputLength} 字符, ${outputLines} 行`);
+    console.warn(`[Pagination] 丢字数: ${inputLength - outputLength}`);
   }
 
   return allPages.length > 0 ? allPages : [""];
