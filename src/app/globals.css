@@ -22,3 +22,127 @@
 .animate-fade-in {
   animation: fade-in 0.6s ease-out;
 }
+
+/* 有序列表：固定编号宽度（预留两位数避免 9→10 跳动）+ 序号与正文间距 + 多行左对齐 */
+.card-content ol.list-fixed-num {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: list-num;
+}
+.card-content ol.list-fixed-num li {
+  padding-left: 3.35em; /* 3em 编号区 + 0.35em 序号与正文间距 */
+  position: relative;
+}
+.card-content ol.list-fixed-num li > * {
+  margin-left: 0;
+  padding-left: 0;
+}
+.card-content ol.list-fixed-num li::before {
+  content: counter(list-num) ".";
+  counter-increment: list-num;
+  position: absolute;
+  left: 0;
+  width: 3em; /* 预留两位数字宽，9 与 10 对齐不跳动 */
+  text-align: right;
+}
+
+/* 无序列表：固定子弹宽度 + 子弹与正文间距 + 多行左对齐 */
+.card-content ul.list-fixed-bullet {
+  list-style: none;
+  padding-left: 0;
+}
+.card-content ul.list-fixed-bullet li {
+  padding-left: 1.75em; /* 1.5em 子弹区 + 0.25em 间距 */
+  position: relative;
+}
+.card-content ul.list-fixed-bullet li > * {
+  margin-left: 0;
+  padding-left: 0;
+}
+.card-content ul.list-fixed-bullet li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  width: 1.5em;
+  text-align: center;
+}
+
+/* 有序列表：固定编号宽度 + 多行与首行文字左对齐 */
+.preview-ol {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  counter-reset: preview-ol-num;
+}
+.preview-ol li {
+  padding-left: 2.5em;
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+.preview-ol li::before {
+  content: counter(preview-ol-num) ".";
+  counter-increment: preview-ol-num;
+  position: absolute;
+  left: 0;
+  width: 2.5em;
+  text-align: right;
+  box-sizing: border-box;
+}
+
+/* 无序列表：固定子弹宽度 + 多行与首行文字左对齐 */
+.preview-ul {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+.preview-ul li {
+  padding-left: 1.5em;
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+.preview-ul li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  width: 1.5em;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* 有序列表：固定编号宽度，数字右对齐，多行文字与首行左对齐 */
+.rednote-ol {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: rednote-ol;
+}
+.rednote-ol li {
+  padding-left: 2.5em;
+  position: relative;
+}
+.rednote-ol li::before {
+  content: counter(rednote-ol) ".";
+  counter-increment: rednote-ol;
+  position: absolute;
+  left: 0;
+  width: 2.5em;
+  text-align: right;
+}
+
+/* 无序列表：固定子弹宽度，多行文字与首行左对齐 */
+.rednote-ul {
+  list-style: none;
+  padding-left: 0;
+}
+.rednote-ul li {
+  padding-left: 1.5em;
+  position: relative;
+}
+.rednote-ul li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  width: 1.5em;
+  text-align: center;
+}

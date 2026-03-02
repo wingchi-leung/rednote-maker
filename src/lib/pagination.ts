@@ -54,6 +54,41 @@ const isBrowser = typeof document !== "undefined" && typeof window !== "undefine
 let measureContainer: HTMLDivElement | null = null;
 const HEIGHT_SAFETY_GAP = 6;
 
+const MEASURE_CACHE_MAX = 180;
+
+function contextKey(ctx: RenderContext): string {
+  return `${ctx.fontSize}|${ctx.lineHeightRatio}|${ctx.contentWidth}|${ctx.contentHeight}`;
+}
+
+function simpleHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+
+const measureCache = new Map<string, boolean>();
+
+function getCachedFit(markdown: string, context: RenderContext): boolean | undefined {
+  const key = `${contextKey(context)}_${simpleHash(markdown)}`;
+  if (!measureCache.has(key)) return undefined;
+  const val = measureCache.get(key)!;
+  measureCache.delete(key);
+  measureCache.set(key, val);
+  return val;
+}
+
+function setCachedFit(markdown: string, context: RenderContext, fits: boolean): void {
+  const key = `${contextKey(context)}_${simpleHash(markdown)}`;
+  if (measureCache.has(key)) measureCache.delete(key);
+  measureCache.set(key, fits);
+  while (measureCache.size > MEASURE_CACHE_MAX) {
+    const first = measureCache.keys().next().value;
+    if (first !== undefined) measureCache.delete(first);
+  }
+}
+
 function preprocessHighlight(md: string): string {
   const parts = md.split(/(```[\s\S]*?```)/g);
   return parts
@@ -112,6 +147,7 @@ function getMeasureContainer(): HTMLDivElement | null {
   if (measureContainer) return measureContainer;
 
   const el = document.createElement("div");
+  el.className = "card-content"; // 应用与预览一致的 CSS 类
   el.style.position = "fixed";
   el.style.left = "-99999px";
   el.style.top = "-99999px";
@@ -134,13 +170,8 @@ function createMeasureComponents() {
       React.createElement(
         "h1",
         {
-          style: {
-            fontSize: "30px",
-            lineHeight: "36px",
-            fontWeight: 700,
-            marginTop: 0,
-            marginBottom: 8,
-          },
+          className: "text-3xl font-bold mb-2 mt-0",
+          style: { fontSize: "30px", fontWeight: 700, marginTop: 0, marginBottom: 8 },
         },
         children
       ),
@@ -148,13 +179,8 @@ function createMeasureComponents() {
       React.createElement(
         "h2",
         {
-          style: {
-            fontSize: "24px",
-            lineHeight: "32px",
-            fontWeight: 700,
-            marginTop: 16,
-            marginBottom: 8,
-          },
+          className: "text-2xl font-bold mb-2 mt-4",
+          style: { fontSize: "24px", fontWeight: 700, marginTop: 16, marginBottom: 8 },
         },
         children
       ),
@@ -162,13 +188,8 @@ function createMeasureComponents() {
       React.createElement(
         "h3",
         {
-          style: {
-            fontSize: "20px",
-            lineHeight: "28px",
-            fontWeight: 700,
-            marginTop: 12,
-            marginBottom: 6,
-          },
+          className: "text-xl font-bold mb-1.5 mt-3",
+          style: { fontSize: "20px", fontWeight: 700, marginTop: 12, marginBottom: 6 },
         },
         children
       ),
@@ -176,13 +197,8 @@ function createMeasureComponents() {
       React.createElement(
         "h4",
         {
-          style: {
-            fontSize: "18px",
-            lineHeight: "28px",
-            fontWeight: 700,
-            marginTop: 8,
-            marginBottom: 4,
-          },
+          className: "text-lg font-bold mb-1 mt-2",
+          style: { fontSize: "18px", fontWeight: 700, marginTop: 8, marginBottom: 4 },
         },
         children
       ),
@@ -190,13 +206,8 @@ function createMeasureComponents() {
       React.createElement(
         "h5",
         {
-          style: {
-            fontSize: "16px",
-            lineHeight: "24px",
-            fontWeight: 700,
-            marginTop: 8,
-            marginBottom: 4,
-          },
+          className: "text-base font-bold mb-1 mt-2",
+          style: { fontSize: "16px", fontWeight: 700, marginTop: 8, marginBottom: 4 },
         },
         children
       ),
@@ -204,13 +215,8 @@ function createMeasureComponents() {
       React.createElement(
         "h6",
         {
-          style: {
-            fontSize: "14px",
-            lineHeight: "20px",
-            fontWeight: 700,
-            marginTop: 6,
-            marginBottom: 2,
-          },
+          className: "text-sm font-bold mb-0.5 mt-1.5",
+          style: { fontSize: "14px", fontWeight: 700, marginTop: 6, marginBottom: 2 },
         },
         children
       ),
@@ -218,10 +224,8 @@ function createMeasureComponents() {
       React.createElement(
         "p",
         {
-          style: {
-            marginTop: 0,
-            marginBottom: 8,
-          },
+          className: "mb-2",
+          style: { marginTop: 0, marginBottom: 8 },
         },
         children
       ),
@@ -229,11 +233,8 @@ function createMeasureComponents() {
       React.createElement(
         "ul",
         {
-          style: {
-            marginTop: 0,
-            marginBottom: 8,
-            paddingLeft: 24,
-          },
+          className: "mb-2 list-fixed-bullet",
+          style: { marginTop: 0, marginBottom: 8, paddingLeft: 0, listStyle: "none" },
         },
         children
       ),
@@ -241,11 +242,8 @@ function createMeasureComponents() {
       React.createElement(
         "ol",
         {
-          style: {
-            marginTop: 0,
-            marginBottom: 8,
-            paddingLeft: 24,
-          },
+          className: "mb-2 list-fixed-num",
+          style: { marginTop: 0, marginBottom: 8, paddingLeft: 0, listStyle: "none" },
         },
         children
       ),
@@ -253,10 +251,8 @@ function createMeasureComponents() {
       React.createElement(
         "li",
         {
-          style: {
-            marginTop: 0,
-            marginBottom: 2,
-          },
+          className: "mb-0.5",
+          style: { marginTop: 0, marginBottom: 2 },
         },
         children
       ),
@@ -264,15 +260,8 @@ function createMeasureComponents() {
       React.createElement(
         "blockquote",
         {
-          style: {
-            marginTop: 8,
-            marginBottom: 8,
-            paddingTop: 4,
-            paddingBottom: 4,
-            paddingLeft: 12,
-            borderLeft: "4px solid currentColor",
-            fontStyle: "italic",
-          },
+          className: "border-l-4 pl-3 py-1 my-2 italic opacity-90",
+          style: { marginTop: 8, marginBottom: 8, borderLeftWidth: "4px", paddingLeft: 12, fontStyle: "italic" },
         },
         children
       ),
@@ -280,10 +269,16 @@ function createMeasureComponents() {
       React.createElement(
         "code",
         {
-          style: {
-            padding: "2px 4px",
-            borderRadius: 4,
-          },
+          className: "px-1 py-0.5 rounded text-sm",
+          style: { padding: "4px 4px", borderRadius: 4, fontSize: "14px" },
+        },
+        children
+      ),
+    pre: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "pre",
+        {
+          style: { backgroundColor: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: 8, overflowX: "auto" },
         },
         children
       ),
@@ -293,6 +288,9 @@ function createMeasureComponents() {
 const measureComponents = createMeasureComponents();
 
 function canFitMarkdown(markdown: string, context: RenderContext): boolean {
+  const cached = getCachedFit(markdown, context);
+  if (cached !== undefined) return cached;
+
   const el = getMeasureContainer();
   if (!el) return false;
 
@@ -314,7 +312,9 @@ function canFitMarkdown(markdown: string, context: RenderContext): boolean {
 
   el.innerHTML = html;
   const measuredHeight = Math.ceil(el.scrollHeight);
-  return measuredHeight <= context.contentHeight - HEIGHT_SAFETY_GAP;
+  const fits = measuredHeight <= context.contentHeight - HEIGHT_SAFETY_GAP;
+  setCachedFit(markdown, context, fits);
+  return fits;
 }
 
 function buildFenceState(lines: string[]): boolean[] {
@@ -344,6 +344,27 @@ function pickSafeSplitIndex(lines: string[], bestFit: number): number {
   const fenceState = buildFenceState(lines);
 
   for (let i = bestFit; i >= 1; i--) {
+    if (fenceState[i]) continue;
+    if (isNaturalBoundary(lines, i)) return i;
+  }
+
+  for (let i = bestFit; i >= 1; i--) {
+    if (!fenceState[i]) return i;
+  }
+
+  return 1;
+}
+
+function pickBalancedSplitIndex(
+  lines: string[],
+  bestFit: number,
+  maxLookBack = 8
+): number {
+  if (bestFit <= 1) return 1;
+  const fenceState = buildFenceState(lines);
+  const minIndex = Math.max(1, bestFit - maxLookBack);
+
+  for (let i = bestFit; i >= minIndex; i--) {
     if (fenceState[i]) continue;
     if (isNaturalBoundary(lines, i)) return i;
   }
@@ -441,7 +462,7 @@ function paginateSegmentByMeasurement(
       continue;
     }
 
-    const splitIndex = pickSafeSplitIndex(lines, bestFit);
+    const splitIndex = pickBalancedSplitIndex(lines, bestFit);
     const page = lines.slice(0, splitIndex).join("\n").trimEnd();
     pages.push(page || "");
     lines = lines.slice(splitIndex);
@@ -522,7 +543,7 @@ function enforceTextBudgetForPage(page: string, budget: number): string[] {
       }
     }
 
-    const split = pickSafeSplitIndex(lines, best);
+    const split = pickBalancedSplitIndex(lines, best);
     out.push(lines.slice(0, split).join("\n").trimEnd());
     lines = lines.slice(split);
   }
@@ -536,6 +557,45 @@ function enforceTextBudget(pages: string[], budget: number): string[] {
     next.push(...enforceTextBudgetForPage(page, budget));
   }
   return next.length > 0 ? next : [""];
+}
+
+const REBALANCE_MAX_PULL_LINES = 12;
+const REBALANCE_UNDERFILL_RATIO = 0.7;
+
+function rebalancePages(
+  pages: string[],
+  context: RenderContext,
+  budget: number
+): string[] {
+  if (!isBrowser || pages.length <= 1) return pages;
+  const result = [...pages];
+  const maxBudget = budget * 1.15;
+
+  for (let i = 0; i < result.length - 1; i++) {
+    const currentWeight = weightedLength(result[i]);
+    if (currentWeight >= budget * REBALANCE_UNDERFILL_RATIO) continue;
+
+    let currentLines = result[i].split("\n");
+    let nextLines = result[i + 1].split("\n");
+    let pulled = 0;
+
+    while (nextLines.length > 0 && pulled < REBALANCE_MAX_PULL_LINES) {
+      const candidateLines = [...currentLines, nextLines[0]];
+      const candidate = candidateLines.join("\n").trimEnd();
+      if (weightedLength(candidate) > maxBudget) break;
+      if (!canFitMarkdown(candidate, context)) break;
+
+      currentLines = candidateLines;
+      nextLines = nextLines.slice(1);
+      pulled++;
+    }
+
+    result[i] = currentLines.join("\n").trimEnd();
+    result[i + 1] = nextLines.join("\n").trimStart();
+  }
+
+  const compact = result.filter((page) => page.trim().length > 0);
+  return compact.length > 0 ? compact : [""];
 }
 
 export function calculatePages(
@@ -560,7 +620,8 @@ export function calculatePages(
     const rawPages = isBrowser
       ? paginateSegmentByMeasurement(segment, context)
       : paginateByCharacterFallback(segment);
-    const pages = enforceTextBudget(rawPages, budget);
+    const budgetedPages = enforceTextBudget(rawPages, budget);
+    const pages = rebalancePages(budgetedPages, context, budget);
     allPages.push(...pages);
   }
 
@@ -572,4 +633,5 @@ export function cleanupMeasureContainer(): void {
     measureContainer.parentNode.removeChild(measureContainer);
   }
   measureContainer = null;
+  measureCache.clear();
 }

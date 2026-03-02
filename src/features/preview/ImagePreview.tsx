@@ -251,10 +251,10 @@ export function ImagePreview() {
               <p className="mb-2" style={{ lineHeight: "inherit" }}>{children}</p>
             ),
             ul: ({ children }) => (
-              <ul className="mb-2 pl-6 list-disc">{children}</ul>
+              <ul className="mb-2 list-fixed-bullet">{children}</ul>
             ),
             ol: ({ children }) => (
-              <ol className="mb-2 pl-6 list-decimal">{children}</ol>
+              <ol className="mb-2 list-fixed-num">{children}</ol>
             ),
             li: ({ children }) => <li className="mb-0.5">{children}</li>,
             code: ({ children }) => (
