@@ -48,6 +48,9 @@ interface RenderContext {
   lineHeightRatio: number;
   contentWidth: number;
   contentHeight: number;
+  accentColor: string;
+  backgroundColor: string;
+  codeBackground: string;
 }
 
 const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
@@ -57,7 +60,7 @@ const HEIGHT_SAFETY_GAP = 6;
 const MEASURE_CACHE_MAX = 180;
 
 function contextKey(ctx: RenderContext): string {
-  return `${ctx.fontSize}|${ctx.lineHeightRatio}|${ctx.contentWidth}|${ctx.contentHeight}`;
+  return `${ctx.fontSize}|${ctx.lineHeightRatio}|${ctx.contentWidth}|${ctx.contentHeight}|${ctx.accentColor}|${ctx.backgroundColor}`;
 }
 
 function simpleHash(s: string): string {
@@ -139,6 +142,9 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     lineHeightRatio: density.lineHeightRatio,
     contentWidth: Math.max(120, Math.floor(contentWidth)),
     contentHeight: Math.max(120, Math.floor(contentHeight)),
+    accentColor: template.colors.accent,
+    backgroundColor: template.colors.background,
+    codeBackground: template.codeBackground ?? "rgba(0,0,0,0.05)",
   };
 }
 
@@ -164,7 +170,7 @@ function getMeasureContainer(): HTMLDivElement | null {
   return el;
 }
 
-function createMeasureComponents() {
+function createMeasureComponents(context: RenderContext) {
   return {
     h1: ({ children }: { children?: React.ReactNode }) =>
       React.createElement(
@@ -261,7 +267,14 @@ function createMeasureComponents() {
         "blockquote",
         {
           className: "border-l-4 pl-3 py-1 my-2 italic opacity-90",
-          style: { marginTop: 8, marginBottom: 8, borderLeftWidth: "4px", paddingLeft: 12, fontStyle: "italic" },
+          style: {
+            marginTop: 8,
+            marginBottom: 8,
+            borderLeftWidth: "4px",
+            borderLeftColor: context.accentColor,
+            paddingLeft: 12,
+            fontStyle: "italic"
+          },
         },
         children
       ),
@@ -270,7 +283,12 @@ function createMeasureComponents() {
         "code",
         {
           className: "px-1 py-0.5 rounded text-sm",
-          style: { padding: "4px 4px", borderRadius: 4, fontSize: "14px" },
+          style: {
+            padding: "4px 4px",
+            borderRadius: 4,
+            fontSize: "14px",
+            backgroundColor: context.codeBackground
+          },
         },
         children
       ),
@@ -278,7 +296,12 @@ function createMeasureComponents() {
       React.createElement(
         "pre",
         {
-          style: { backgroundColor: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: 8, overflowX: "auto" },
+          style: {
+            backgroundColor: context.codeBackground,
+            padding: "12px",
+            borderRadius: 8,
+            overflowX: "auto"
+          },
         },
         children
       ),
@@ -287,7 +310,7 @@ function createMeasureComponents() {
         "strong",
         {
           className: "font-bold",
-          style: { fontWeight: 700 },
+          style: { fontWeight: 700, color: context.accentColor },
         },
         children
       ),
@@ -305,14 +328,18 @@ function createMeasureComponents() {
         "mark",
         {
           className: "rounded px-0.5 font-medium",
-          style: { backgroundColor: "#0071E3", color: "#FFFFFF", borderRadius: 4, padding: "2px 4px", fontWeight: 500 },
+          style: {
+            backgroundColor: context.accentColor,
+            color: context.backgroundColor,
+            borderRadius: 4,
+            padding: "2px 4px",
+            fontWeight: 500
+          },
         },
         children
       ),
   };
 }
-
-const measureComponents = createMeasureComponents();
 
 function canFitMarkdown(markdown: string, context: RenderContext): boolean {
   const cached = getCachedFit(markdown, context);
@@ -324,6 +351,8 @@ function canFitMarkdown(markdown: string, context: RenderContext): boolean {
   el.style.width = `${context.contentWidth}px`;
   el.style.fontSize = `${context.fontSize}px`;
   el.style.lineHeight = context.lineHeightRatio.toString();
+
+  const measureComponents = createMeasureComponents(context);
 
   const html = renderToStaticMarkup(
     React.createElement(
