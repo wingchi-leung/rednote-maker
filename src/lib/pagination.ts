@@ -282,6 +282,33 @@ function createMeasureComponents() {
         },
         children
       ),
+    strong: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "strong",
+        {
+          className: "font-bold",
+          style: { fontWeight: 700 },
+        },
+        children
+      ),
+    em: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "em",
+        {
+          className: "italic",
+          style: { fontStyle: "italic" },
+        },
+        children
+      ),
+    mark: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(
+        "mark",
+        {
+          className: "rounded px-0.5 font-medium",
+          style: { backgroundColor: "#0071E3", color: "#FFFFFF", borderRadius: 4, padding: "2px 4px", fontWeight: 500 },
+        },
+        children
+      ),
   };
 }
 
