@@ -4,6 +4,7 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { CARD_CONFIG } from "./constants";
 import { getTemplate, type Theme } from "./templates";
 
@@ -355,7 +356,7 @@ function canFitMarkdown(markdown: string, context: RenderContext): boolean {
 
   const measureComponents = createMeasureComponents(context);
 
-  // 使用客户端渲染而不是服务端渲染，确保与实际渲染完全一致
+  // 使用客户端渲染 + flushSync 确保同步渲染完成
   const root = createRoot(el);
   const component = React.createElement(
     ReactMarkdown,
@@ -367,9 +368,12 @@ function canFitMarkdown(markdown: string, context: RenderContext): boolean {
     preprocessHighlight(markdown || "*空页面*")
   );
 
-  root.render(component);
+  // 使用 flushSync 强制同步渲染
+  flushSync(() => {
+    root.render(component);
+  });
 
-  // 等待渲染完成
+  // 现在可以安全地读取 scrollHeight
   const measuredHeight = Math.ceil(el.scrollHeight);
 
   // 清理
