@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
 import { CARD_CONFIG } from "./constants";
 import { getTemplate, type Theme } from "./templates";
 
@@ -354,21 +355,29 @@ function canFitMarkdown(markdown: string, context: RenderContext): boolean {
 
   const measureComponents = createMeasureComponents(context);
 
-  const html = renderToStaticMarkup(
-    React.createElement(
-      ReactMarkdown,
-      {
-        remarkPlugins: [remarkGfm],
-        rehypePlugins: [rehypeRaw],
-        components: measureComponents,
-      },
-      preprocessHighlight(markdown || "*空页面*")
-    )
+  // 使用客户端渲染而不是服务端渲染，确保与实际渲染完全一致
+  const root = createRoot(el);
+  const component = React.createElement(
+    ReactMarkdown,
+    {
+      remarkPlugins: [remarkGfm],
+      rehypePlugins: [rehypeRaw],
+      components: measureComponents,
+    },
+    preprocessHighlight(markdown || "*空页面*")
   );
 
-  el.innerHTML = html;
+  root.render(component);
+
+  // 等待渲染完成
   const measuredHeight = Math.ceil(el.scrollHeight);
-  const fits = measuredHeight <= context.contentHeight - HEIGHT_SAFETY_GAP;
+
+  // 清理
+  root.unmount();
+
+  const maxHeight = context.contentHeight - HEIGHT_SAFETY_GAP;
+  const fits = measuredHeight <= maxHeight;
+
   setCachedFit(markdown, context, fits);
   return fits;
 }
