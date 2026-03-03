@@ -258,7 +258,9 @@ function createMeasureComponents(context: RenderContext) {
         "li",
         {
           className: "mb-0.5",
-          style: { marginTop: 0, marginBottom: 2, paddingLeft: "1.75em", position: "relative" },
+          // 不在测量层强行指定列表缩进：让 `.card-content ol/ul ... li` 的真实 CSS 生效，
+          // 否则会导致测量高度与预览高度不一致，从而出现 overflow hidden “丢字/跳号”。
+          style: { marginTop: 0, marginBottom: 2 },
         },
         children
       ),

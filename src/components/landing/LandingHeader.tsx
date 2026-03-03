@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { CoffeeGiftHover } from "@/components/coffee/CoffeeGiftHover";
 
 export function LandingHeader() {
   return (
@@ -9,12 +10,15 @@ export function LandingHeader() {
           <BrandMark />
           <span className="font-semibold text-gray-800">RedNoteMaker</span>
         </div>
-        <Link
-          href="/editor"
-          className="text-sm font-medium text-apple-blue hover:underline"
-        >
-          进入编辑器
-        </Link>
+        <div className="flex items-center gap-2">
+          <CoffeeGiftHover />
+          <Link
+            href="/editor"
+            className="text-sm font-medium text-apple-blue hover:underline"
+          >
+            进入编辑器
+          </Link>
+        </div>
       </div>
     </header>
   );

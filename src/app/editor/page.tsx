@@ -4,14 +4,18 @@ import { MarkdownEditor } from "@/features/editor/MarkdownEditor";
 import { ImagePreview } from "@/features/preview/ImagePreview";
 import { SettingsToolbar } from "@/components/toolbar/SettingsToolbar";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { CoffeeGiftHover } from "@/components/coffee/CoffeeGiftHover";
 
 export default function EditorPage() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-apple-border px-6 py-4 flex items-center gap-3">
-        <BrandMark />
-        <h1 className="text-lg font-semibold text-gray-800">RedNoteMaker</h1>
+      <header className="bg-white border-b border-apple-border px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <h1 className="text-lg font-semibold text-gray-800">RedNoteMaker</h1>
+        </div>
+        <CoffeeGiftHover />
       </header>
 
       {/* Settings Toolbar */}

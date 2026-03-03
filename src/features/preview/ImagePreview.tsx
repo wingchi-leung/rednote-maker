@@ -35,6 +35,15 @@ function preprocessHighlight(md: string): string {
     .join("");
 }
 
+function getOrderedListCounterStyle(
+  counterName: string,
+  start: unknown
+): React.CSSProperties | undefined {
+  if (typeof start !== "number" || !Number.isFinite(start)) return undefined;
+  const normalizedStart = Math.max(1, Math.floor(start));
+  return { counterReset: `${counterName} ${normalizedStart - 1}` };
+}
+
 type PreviewViewMode = "pagination" | "list";
 
 export function ImagePreview() {
@@ -253,8 +262,13 @@ export function ImagePreview() {
             ul: ({ children }) => (
               <ul className="mb-2 list-fixed-bullet">{children}</ul>
             ),
-            ol: ({ children }) => (
-              <ol className="mb-2 list-fixed-num">{children}</ol>
+            ol: ({ children, start }) => (
+              <ol
+                className="mb-2 list-fixed-num"
+                style={getOrderedListCounterStyle("list-num", start)}
+              >
+                {children}
+              </ol>
             ),
             li: ({ children }) => <li className="mb-0.5">{children}</li>,
             code: ({ children }) => (
