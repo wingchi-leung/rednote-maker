@@ -8,7 +8,7 @@ export function LandingCta() {
           马上试试，完全免费
         </h2>
         <p className="text-gray-500 mb-8">
-          无需登录，打开浏览器即可把 Markdown 变成小红书卡片
+          无需登录，打开浏览器即可把 Markdown 变成小红书风格图文卡片，适合微信图文卡片制作、知识分享与内容沉淀。
         </p>
         <Link
           href="/editor"

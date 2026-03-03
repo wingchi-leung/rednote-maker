@@ -14,10 +14,14 @@ export const metadata: Metadata = {
     "极简、专注的 Markdown 转小红书图文卡片工具，一键生成高质量图文排版。",
   keywords: [
     "RedNoteMaker",
-    "小红书",
+    "Markdown 转卡片",
     "Markdown 转图片",
-    "图文卡片生成",
-    "内容创作工具",
+    "markdown to card",
+    "图文排版工具",
+    "小红书风格卡片",
+    "微信图文卡片制作",
+    "自动拆分长文",
+    "一键导出图片",
   ],
   icons: {
     icon: "/icon.png",

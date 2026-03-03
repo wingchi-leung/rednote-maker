@@ -29,7 +29,8 @@ export function LandingHero() {
           className="text-lg sm:text-xl text-gray-600 mb-10 leading-relaxed opacity-0 animate-fade-in"
           style={{ animationDelay: "0.35s", animationFillMode: "forwards" }}
         >
-          极简主义的 Markdown 转小红书卡片工具。写内容，自动分页，一键导出高清图。
+          Markdown 转小红书风格卡片工具，支持 Markdown 转卡片 / Markdown
+          转图片，自动拆分长文，一键导出高清图文卡片。
         </p>
         <div
           className="flex flex-col sm:flex-row gap-4 justify-center opacity-0 animate-fade-in"
