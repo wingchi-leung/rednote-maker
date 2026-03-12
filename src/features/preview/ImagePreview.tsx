@@ -13,6 +13,7 @@ import {
   fontSizes,
   densitySpacing,
 } from "@/store/useContentThemeStore";
+import { useImageStore } from "@/store/useImageStore";
 import { getTemplate, getTemplateLayout, getCodeBackground } from "@/lib/templates";
 import { SketchBackground } from "@/features/preview/SketchBackground";
 import { calculatePages } from "@/lib/pagination";
@@ -49,6 +50,7 @@ type PreviewViewMode = "pagination" | "list";
 export function ImagePreview() {
   const { content } = useMarkdownContentStore();
   const { theme, fontSize, density, alignment } = useContentThemeStore();
+  const { images } = useImageStore();
   const [currentPage, setCurrentPage] = useState(0);
   // 渲染时直接根据 content 计算页，避免 useEffect 滞后导致预览/导出页数不对
   const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
@@ -304,6 +306,39 @@ export function ImagePreview() {
                 {children}
               </blockquote>
             ),
+            img: ({ src, alt }) => {
+              // Check if src is an image ID from pasted image
+              if (typeof src === "string" && src.startsWith("img-")) {
+                const pastedImage = images.find((img) => img.id === src);
+                if (pastedImage) {
+                  return (
+                    <img
+                      src={pastedImage.dataUrl}
+                      alt={alt || pastedImage.name || "Pasted image"}
+                      className="my-2 rounded-lg"
+                      style={{
+                        maxWidth: "100%",
+                        height: "auto",
+                        objectFit: "contain",
+                      }}
+                    />
+                  );
+                }
+              }
+              // For external images, render as-is
+              return (
+                <img
+                  src={typeof src === "string" ? src : undefined}
+                  alt={alt || ""}
+                  className="my-2 rounded-lg"
+                  style={{
+                    maxWidth: "100%",
+                    height: "auto",
+                    objectFit: "contain",
+                  }}
+                />
+              );
+            },
           }}
         >
           {preprocessHighlight(pageContent || "*空页面*")}

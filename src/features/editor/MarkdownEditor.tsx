@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
+import { useImageStore } from "@/store/useImageStore";
 import { ResetIcon } from "@/components/icons/ResetIcon";
 import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
 export function MarkdownEditor() {
   const { content, setContent, resetContent } = useMarkdownContentStore();
+  const { addImage } = useImageStore();
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const handleChange = useCallback(
     (value: string) => {
@@ -18,8 +21,45 @@ export function MarkdownEditor() {
     [setContent]
   );
 
+  const handlePaste = useCallback(
+    async (event: React.ClipboardEvent<HTMLDivElement>) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          event.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            const id = `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            addImage({
+              id,
+              dataUrl,
+              name: file.name,
+            });
+
+            // Insert image markdown at cursor position
+            const imageMarkdown = `\n![${file.name || "image"}](${id})\n`;
+            setContent(content + imageMarkdown);
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    },
+    [addImage, setContent]
+  );
+
   return (
-    <div className="h-full flex flex-col">
+    <div
+      ref={editorRef}
+      className="h-full flex flex-col"
+      onPaste={handlePaste}
+    >
       <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
         <div className="flex items-center gap-1">
