@@ -352,7 +352,7 @@ export function ImagePreview() {
                     <img
                       src={pastedImage.dataUrl}
                       alt={alt || pastedImage.name || "Pasted image"}
-                      className="my-2 rounded-lg"
+                      className="my-4 rounded-lg"
                       style={{
                         maxWidth: "100%",
                         height: "auto",
@@ -367,7 +367,7 @@ export function ImagePreview() {
                 <img
                   src={typeof src === "string" ? src : undefined}
                   alt={alt || ""}
-                  className="my-2 rounded-lg"
+                  className="my-4 rounded-lg"
                   style={{
                     maxWidth: "100%",
                     height: "auto",

@@ -176,8 +176,8 @@ function createMeasureComponents(context: RenderContext) {
       React.createElement(
         "h1",
         {
-          className: "text-3xl font-bold mb-2 mt-0",
-          style: { fontSize: "30px", fontWeight: 700, marginTop: 0, marginBottom: 8 },
+          className: "text-4xl font-bold mb-2 mt-0",
+          style: { fontSize: "36px", fontWeight: 700, marginTop: 0, marginBottom: 8 },
         },
         children
       ),
@@ -340,6 +340,24 @@ function createMeasureComponents(context: RenderContext) {
         },
         children
       ),
+    img: ({ src, alt }: { src?: string | Blob; alt?: string }) => {
+      const srcString = typeof src === "string" ? src : undefined;
+      return React.createElement(
+        "img",
+        {
+          src: srcString,
+          alt: alt || "",
+          style: {
+            maxWidth: "100%",
+            height: "auto",
+            marginTop: 16,
+            marginBottom: 16,
+            borderRadius: 8,
+            objectFit: "contain" as const,
+          },
+        }
+      );
+    },
   };
 }
 
