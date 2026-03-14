@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
@@ -12,7 +12,6 @@ import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 export function MarkdownEditor() {
   const { content, setContent, resetContent } = useMarkdownContentStore();
   const { addImage } = useImageStore();
-  const editorRef = useRef<HTMLDivElement>(null);
 
   const handleChange = useCallback(
     (value: string) => {
@@ -21,45 +20,53 @@ export function MarkdownEditor() {
     [setContent]
   );
 
-  const handlePaste = useCallback(
-    async (event: React.ClipboardEvent<HTMLDivElement>) => {
-      const items = event.clipboardData?.items;
-      if (!items) return;
+  // Create a CodeMirror extension to handle paste events
+  const pasteExtension = useMemo(() => {
+    return EditorView.domEventHandlers({
+      paste: (event, view) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
 
-      for (const item of Array.from(items)) {
-        if (item.type.startsWith("image/")) {
-          event.preventDefault();
-          const file = item.getAsFile();
-          if (!file) continue;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
 
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const dataUrl = e.target?.result as string;
-            const id = `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            addImage({
-              id,
-              dataUrl,
-              name: file.name,
-            });
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const dataUrl = e.target?.result as string;
+              const id = `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+              addImage({
+                id,
+                dataUrl,
+                name: file.name,
+              });
 
-            // Insert image markdown at cursor position
-            const imageMarkdown = `\n![${file.name || "image"}](${id})\n`;
-            setContent(content + imageMarkdown);
-          };
-          reader.readAsDataURL(file);
-          break;
+              // Insert image markdown at cursor position
+              const imageMarkdown = `\n![${file.name || "image"}](${id})\n`;
+
+              // Get current content from the store and append
+              const currentContent = view.state.doc.toString();
+              const transaction = view.state.update({
+                changes: {
+                  from: view.state.selection.main.from,
+                  insert: imageMarkdown,
+                },
+              });
+              view.dispatch(transaction);
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
         }
-      }
-    },
-    [addImage, setContent]
-  );
+        return false;
+      },
+    });
+  }, [addImage]);
 
   return (
-    <div
-      ref={editorRef}
-      className="h-full flex flex-col"
-      onPaste={handlePaste}
-    >
+    <div className="h-full flex flex-col">
       <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
         <div className="flex items-center gap-1">
@@ -84,7 +91,7 @@ export function MarkdownEditor() {
         <CodeMirror
           value={content}
           height="100%"
-          extensions={[markdown(), EditorView.lineWrapping]}
+          extensions={[markdown(), EditorView.lineWrapping, pasteExtension]}
           onChange={handleChange}
           className="text-sm"
           basicSetup={{
