@@ -278,7 +278,7 @@ export function ImagePreview() {
           rehypePlugins={[rehypeRaw]}
           components={{
             h1: ({ children }) => (
-              <h1 className="text-3xl font-bold mb-2 mt-0">{children}</h1>
+              <h1 className="text-4xl font-bold mb-2 mt-0">{children}</h1>
             ),
             h2: ({ children }) => (
               <h2 className="text-2xl font-bold mb-2 mt-4">{children}</h2>
