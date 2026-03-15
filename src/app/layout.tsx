@@ -23,9 +23,6 @@ export const metadata: Metadata = {
     "自动拆分长文",
     "一键导出图片",
   ],
-  icons: {
-    icon: "/icon.png",
-  },
   openGraph: {
     type: "website",
     locale: "zh_CN",
