@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useEffect } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
@@ -11,7 +11,13 @@ import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
 export function MarkdownEditor() {
   const { content, setContent, resetContent } = useMarkdownContentStore();
-  const { addImage } = useImageStore();
+  const addImage = useImageStore((state) => state.addImage);
+
+  // Use ref to store the latest addImage to avoid recreating the extension
+  const addImageRef = useRef(addImage);
+  useEffect(() => {
+    addImageRef.current = addImage;
+  }, [addImage]);
 
   const handleChange = useCallback(
     (value: string) => {
@@ -20,50 +26,51 @@ export function MarkdownEditor() {
     [setContent]
   );
 
-  // Create a CodeMirror extension to handle paste events
-  const pasteExtension = useMemo(() => {
-    return EditorView.domEventHandlers({
-      paste: (event, view) => {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
+  // Create a stable CodeMirror extension to handle paste events
+  // Using ref ensures the extension is created only once
+  const pasteExtension = useMemo(
+    () =>
+      EditorView.domEventHandlers({
+        paste: (event, view) => {
+          const items = event.clipboardData?.items;
+          if (!items) return false;
 
-        for (const item of Array.from(items)) {
-          if (item.type.startsWith("image/")) {
-            event.preventDefault();
-            const file = item.getAsFile();
-            if (!file) continue;
+          for (const item of Array.from(items)) {
+            if (item.type.startsWith("image/")) {
+              event.preventDefault();
+              const file = item.getAsFile();
+              if (!file) continue;
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const dataUrl = e.target?.result as string;
-              const id = `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-              addImage({
-                id,
-                dataUrl,
-                name: file.name,
-              });
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const dataUrl = e.target?.result as string;
+                const id = `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                addImageRef.current({
+                  id,
+                  dataUrl,
+                  name: file.name,
+                });
 
-              // Insert image markdown at cursor position
-              const imageMarkdown = `\n![${file.name || "image"}](${id})\n`;
+                // Insert image markdown at cursor position
+                const imageMarkdown = `\n![${file.name || "image"}](${id})\n`;
 
-              // Get current content from the store and append
-              const currentContent = view.state.doc.toString();
-              const transaction = view.state.update({
-                changes: {
-                  from: view.state.selection.main.from,
-                  insert: imageMarkdown,
-                },
-              });
-              view.dispatch(transaction);
-            };
-            reader.readAsDataURL(file);
-            return true;
+                const transaction = view.state.update({
+                  changes: {
+                    from: view.state.selection.main.from,
+                    insert: imageMarkdown,
+                  },
+                });
+                view.dispatch(transaction);
+              };
+              reader.readAsDataURL(file);
+              return true;
+            }
           }
-        }
-        return false;
-      },
-    });
-  }, [addImage]);
+          return false;
+        },
+      }),
+    []
+  );
 
   return (
     <div className="h-full flex flex-col">
