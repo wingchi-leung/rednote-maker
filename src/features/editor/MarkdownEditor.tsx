@@ -9,6 +9,14 @@ import { useImageStore } from "@/store/useImageStore";
 import { ResetIcon } from "@/components/icons/ResetIcon";
 import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
+const CODEMIRROR_BASIC_SETUP = {
+  lineNumbers: false,
+  foldGutter: false,
+  dropCursor: false,
+  allowMultipleSelections: false,
+  indentOnInput: true,
+};
+
 export function MarkdownEditor() {
   const { content, setContent, resetContent } = useMarkdownContentStore();
   const addImage = useImageStore((state) => state.addImage);
@@ -101,13 +109,7 @@ export function MarkdownEditor() {
           extensions={[markdown(), EditorView.lineWrapping, pasteExtension]}
           onChange={handleChange}
           className="text-sm"
-          basicSetup={{
-            lineNumbers: false,
-            foldGutter: false,
-            dropCursor: false,
-            allowMultipleSelections: false,
-            indentOnInput: true,
-          }}
+          basicSetup={CODEMIRROR_BASIC_SETUP}
         />
       </div>
     </div>
