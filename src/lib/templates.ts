@@ -82,6 +82,19 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     cardFrame: { topLine: true, sideMarginPercent: 10 },
   },
   {
+    id: "lennyCover",
+    label: "Lenny 封面",
+    colors: {
+      background: "#FFFFFF",
+      text: "#1A1A1A",
+      accent: "#E85D3F",
+    },
+    layout: "default",
+    blockquoteColor: "#F59E0B",
+    cardFrame: { topLine: true, sideMarginPercent: 8 },
+    codeBackground: "rgba(232,93,63,0.08)",
+  },
+  {
     id: "appleNotes",
     label: "苹果备忘录",
     colors: {
