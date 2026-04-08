@@ -163,7 +163,7 @@ export function createMarkdownComponents({
         {children}
       </blockquote>
     ),
-    img: ({ src, alt }) => {
+    img: ({ src, alt, className, ...props }) => {
       const resolved = resolveImageSource(
         typeof src === "string" ? src : undefined,
         images
@@ -173,16 +173,23 @@ export function createMarkdownComponents({
         return null;
       }
 
+      const hasCustomClass = className && className.trim().length > 0;
+
       return (
         <img
           src={resolved.src}
           alt={alt || resolved.alt}
-          className="my-4 rounded-lg"
-          style={{
-            maxWidth: "100%",
-            height: "auto",
-            objectFit: "contain",
-          }}
+          className={className || "my-4 rounded-lg"}
+          style={
+            hasCustomClass
+              ? undefined
+              : {
+                  maxWidth: "100%",
+                  height: "auto",
+                  objectFit: "contain",
+                }
+          }
+          {...props}
         />
       );
     },
