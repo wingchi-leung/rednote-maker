@@ -257,35 +257,8 @@ export function ImagePreview() {
             backgroundColor: themeColors[theme].background,
             logging: false,
           });
-          const targetW = CARD_CONFIG.width;
-          const targetH = CARD_CONFIG.height;
-          const canvas =
-            captured.width === targetW && captured.height === targetH
-              ? captured
-              : (() => {
-                  const out = document.createElement("canvas");
-                  out.width = targetW;
-                  out.height = targetH;
-                  const ctx = out.getContext("2d");
-                  if (ctx) {
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.imageSmoothingQuality = "high";
-                    ctx.drawImage(
-                      captured,
-                      0,
-                      0,
-                      captured.width,
-                      captured.height,
-                      0,
-                      0,
-                      targetW,
-                      targetH
-                    );
-                  }
-                  return out;
-                })();
           const blob = await new Promise<Blob | null>((resolveBlob) => {
-            canvas.toBlob(resolveBlob, "image/png");
+            captured.toBlob(resolveBlob, "image/png");
           });
           if (blob) {
             blobs.push({
@@ -335,7 +308,7 @@ export function ImagePreview() {
     trackExportRef = true
   ) => {
     const isVisible =
-      forceVisible || index === currentPage || isExporting;
+      forceVisible || index === currentPage;
     const displayStyle = isVisible ? {} : { display: "none" };
 
     const layout = getTemplateLayout(theme);
@@ -578,7 +551,7 @@ export function ImagePreview() {
             : "flex items-center justify-center p-3 overflow-auto"
         }`}
       >
-        {viewMode === "list" && !isExporting ? (
+        {viewMode === "list" ? (
           <>
             <div
               ref={listScrollRef}
@@ -587,7 +560,7 @@ export function ImagePreview() {
               <div
                 className="flex flex-col items-center gap-4 mx-auto"
                 style={{
-                  width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
+                  width: `${CARD_CONFIG.previewWidth}px`,
                 }}
               >
                 {pages.map((pageContent, index) => (
@@ -598,8 +571,8 @@ export function ImagePreview() {
                     }}
                     className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
                     style={{
-                      width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
-                      height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
+                      width: `${CARD_CONFIG.previewWidth}px`,
+                      height: `${CARD_CONFIG.previewHeight}px`,
                     }}
                   >
                     {renderPage(pageContent, index, true)}
@@ -621,32 +594,14 @@ export function ImagePreview() {
             <div
               className="rounded-xl shadow-md bg-white/80 backdrop-blur-sm border border-apple-border/60 overflow-hidden shrink-0"
               style={{
-                width: `${CARD_CONFIG.width / CARD_CONFIG.scale}px`,
-                height: `${CARD_CONFIG.height / CARD_CONFIG.scale}px`,
+                width: `${CARD_CONFIG.previewWidth}px`,
+                height: `${CARD_CONFIG.previewHeight}px`,
                 position: "relative",
               }}
             >
-              {isExporting ? (
-                <div className="absolute inset-0">
-                  {pages.map((page, index) => (
-                    <div
-                      key={index}
-                      ref={(el) => {
-                        exportRefs.current[index] = el;
-                      }}
-                      className="absolute inset-0"
-                      style={{ width: "100%", height: "100%" }}
-                    >
-                      {renderPage(page, index, true)}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                // Show only current page for preview
-                <div className="w-full h-full">
-                  {renderPage(pages[currentPage] || "", currentPage)}
-                </div>
-              )}
+              <div className="w-full h-full">
+                {renderPage(pages[currentPage] || "", currentPage)}
+              </div>
             </div>
           </div>
         )}
@@ -664,11 +619,11 @@ export function ImagePreview() {
             }}
             className="overflow-hidden"
             style={{
-              width: `${CARD_CONFIG.width}px`,
-              height: `${CARD_CONFIG.height}px`,
+              width: `${CARD_CONFIG.previewWidth}px`,
+              height: `${CARD_CONFIG.previewHeight}px`,
             }}
           >
-            {renderPage(pageContent, index, true, false)}
+            {renderPage(pageContent, index, true, true)}
           </div>
         ))}
       </div>

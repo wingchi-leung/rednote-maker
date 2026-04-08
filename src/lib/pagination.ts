@@ -176,8 +176,8 @@ function getRenderContext(options: PaginationOptions): RenderContext {
   const template = getTemplate(options.theme);
   const fontSize = FONT_SIZE_CONFIG[options.fontSize];
 
-  let contentWidth = CARD_CONFIG.width - density.padding * 2;
-  let contentHeight = CARD_CONFIG.height - density.padding * 2;
+  let contentWidth = CARD_CONFIG.previewWidth - density.padding * 2;
+  let contentHeight = CARD_CONFIG.previewHeight - density.padding * 2;
 
   if (template.layout === "appleNotes") {
     contentHeight -= TEMPLATE_EXTRA.appleHeader;
@@ -188,7 +188,7 @@ function getRenderContext(options: PaginationOptions): RenderContext {
   }
 
   if (template.cardFrame?.topLine) {
-    const sideMarginPx = (CARD_CONFIG.width * template.cardFrame.sideMarginPercent) / 100;
+    const sideMarginPx = (CARD_CONFIG.previewWidth * template.cardFrame.sideMarginPercent) / 100;
     contentWidth -= sideMarginPx * 2;
     contentHeight -= TEMPLATE_EXTRA.frameTopLine + TEMPLATE_EXTRA.frameTopMargin;
   }
