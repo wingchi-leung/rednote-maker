@@ -1,10 +1,18 @@
 import React from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import remarkGfm from "remark-gfm";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CARD_CONFIG } from "./constants";
-import { getTemplate, type Theme } from "./templates";
+import type { Content, List, Root } from "mdast";
+import { toMarkdown } from "mdast-util-to-markdown";
+import { toString } from "mdast-util-to-string";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { CARD_CONFIG } from "@/lib/constants";
+import { getTemplate, type Theme } from "@/lib/templates";
+import {
+  CARD_FONT_FAMILY,
+  CardMarkdownContent,
+} from "@/features/preview/CardMarkdownContent";
+import { CARD_FOOTER_HEIGHT } from "@/features/preview/CardFooter";
 
 export type { ContentBlock };
 
@@ -23,6 +31,16 @@ export interface PaginationOptions {
   density: Density;
   fontSize: FontSize;
   theme: Theme;
+  footer?: {
+    isEnabled: boolean;
+    text: string;
+  };
+}
+
+interface PaginationUnit {
+  markdown: string;
+  kind: "block" | "list-item";
+  listGroupKey?: string;
 }
 
 const DENSITY_CONFIG = {
@@ -50,68 +68,102 @@ interface RenderContext {
   contentHeight: number;
   accentColor: string;
   backgroundColor: string;
+  blockquoteColor: string;
   codeBackground: string;
 }
 
+interface OffsetPosition {
+  start?: { offset?: number | null };
+  end?: { offset?: number | null };
+}
+
 const isBrowser = typeof document !== "undefined" && typeof window !== "undefined";
-let measureContainer: HTMLDivElement | null = null;
 const HEIGHT_SAFETY_GAP = 6;
+const MEASURE_CACHE_MAX = 200;
+const FALLBACK_TEXT_BUDGET = 900;
 
-const MEASURE_CACHE_MAX = 180;
-
-function contextKey(ctx: RenderContext): string {
-  return `${ctx.fontSize}|${ctx.lineHeightRatio}|${ctx.contentWidth}|${ctx.contentHeight}|${ctx.accentColor}|${ctx.backgroundColor}`;
-}
-
-function simpleHash(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return String(h);
-}
-
+let measureContainer: HTMLDivElement | null = null;
 const measureCache = new Map<string, boolean>();
+
+function createMarkdownProcessor() {
+  return unified().use(remarkParse).use(remarkGfm);
+}
+
+function normalizeFragment(markdown: string): string {
+  return markdown.replace(/^\n+|\n+$/g, "");
+}
+
+function contextKey(context: RenderContext): string {
+  return [
+    context.fontSize,
+    context.lineHeightRatio,
+    context.contentWidth,
+    context.contentHeight,
+    context.accentColor,
+    context.backgroundColor,
+    context.blockquoteColor,
+    context.codeBackground,
+  ].join("|");
+}
+
+function simpleHash(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return String(hash);
+}
 
 function getCachedFit(markdown: string, context: RenderContext): boolean | undefined {
   const key = `${contextKey(context)}_${simpleHash(markdown)}`;
-  if (!measureCache.has(key)) return undefined;
-  const val = measureCache.get(key)!;
+  const cached = measureCache.get(key);
+  if (cached === undefined) {
+    return undefined;
+  }
+
   measureCache.delete(key);
-  measureCache.set(key, val);
-  return val;
+  measureCache.set(key, cached);
+  return cached;
 }
 
 function setCachedFit(markdown: string, context: RenderContext, fits: boolean): void {
   const key = `${contextKey(context)}_${simpleHash(markdown)}`;
-  if (measureCache.has(key)) measureCache.delete(key);
+  if (measureCache.has(key)) {
+    measureCache.delete(key);
+  }
+
   measureCache.set(key, fits);
+
   while (measureCache.size > MEASURE_CACHE_MAX) {
     const first = measureCache.keys().next().value;
-    if (first !== undefined) measureCache.delete(first);
+    if (first) {
+      measureCache.delete(first);
+    }
   }
 }
 
-function preprocessHighlight(md: string): string {
-  const parts = md.split(/(```[\s\S]*?```)/g);
-  return parts
-    .map((part, i) =>
-      i % 2 === 0 ? part.replace(/==([^=]+?)==/g, "<mark>$1</mark>") : part
-    )
-    .join("");
-}
-
 function splitByPageBreak(content: string): string[] {
-  const trimmed = content.trim();
-  if (!trimmed) return [""];
+  const normalizedPageBreakLines = content.replace(
+    /(^|\n)(\s*)---([^\s-][^\n]*)/g,
+    (_match, prefix: string, indent: string, trailing: string) =>
+      `${prefix}${indent}---\n${indent}${trailing}`
+  );
+
+  const trimmed = normalizedPageBreakLines.trim();
+  if (!trimmed) {
+    return [""];
+  }
+
   const re = new RegExp(
     `\\n\\s*${PAGE_BREAK_SEPARATOR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n`,
     "g"
   );
+
   const segments = trimmed
     .split(re)
-    .map((s) => s.trim())
+    .map((segment) => segment.trim())
     .filter(Boolean);
+
   return segments.length > 0 ? segments : [""];
 }
 
@@ -131,6 +183,10 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     contentHeight -= TEMPLATE_EXTRA.appleHeader;
   }
 
+  if (options.footer?.isEnabled && options.footer.text.trim()) {
+    contentHeight -= CARD_FOOTER_HEIGHT;
+  }
+
   if (template.cardFrame?.topLine) {
     const sideMarginPx = (CARD_CONFIG.width * template.cardFrame.sideMarginPercent) / 100;
     contentWidth -= sideMarginPx * 2;
@@ -144,433 +200,328 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     contentHeight: Math.max(120, Math.floor(contentHeight)),
     accentColor: template.colors.accent,
     backgroundColor: template.colors.background,
+    blockquoteColor: template.blockquoteColor ?? template.colors.accent,
     codeBackground: template.codeBackground ?? "rgba(0,0,0,0.05)",
   };
 }
 
 function getMeasureContainer(): HTMLDivElement | null {
-  if (!isBrowser) return null;
-  if (measureContainer) return measureContainer;
+  if (!isBrowser) {
+    return null;
+  }
 
-  const el = document.createElement("div");
-  el.className = "card-content"; // 应用与预览一致的 CSS 类
-  el.style.position = "fixed";
-  el.style.left = "-99999px";
-  el.style.top = "-99999px";
-  el.style.visibility = "hidden";
-  el.style.pointerEvents = "none";
-  el.style.overflow = "visible";
-  el.style.boxSizing = "border-box";
-  el.style.wordBreak = "break-word";
-  el.style.overflowWrap = "break-word";
-  el.style.fontFamily =
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-  document.body.appendChild(el);
-  measureContainer = el;
-  return el;
+  if (measureContainer) {
+    return measureContainer;
+  }
+
+  const container = document.createElement("div");
+  container.className = "card-content";
+  container.style.position = "fixed";
+  container.style.left = "-99999px";
+  container.style.top = "-99999px";
+  container.style.visibility = "hidden";
+  container.style.pointerEvents = "none";
+  container.style.overflow = "visible";
+  container.style.boxSizing = "border-box";
+  container.style.wordBreak = "break-word";
+  container.style.overflowWrap = "break-word";
+  container.style.fontFamily = CARD_FONT_FAMILY;
+
+  document.body.appendChild(container);
+  measureContainer = container;
+  return measureContainer;
 }
 
-function createMeasureComponents(context: RenderContext) {
-  return {
-    h1: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h1",
-        {
-          className: "text-4xl font-bold mb-2 mt-0",
-          style: { fontSize: "36px", fontWeight: 700, marginTop: 0, marginBottom: 8 },
-        },
-        children
-      ),
-    h2: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h2",
-        {
-          className: "text-2xl font-bold mb-2 mt-4",
-          style: { fontSize: "24px", fontWeight: 700, marginTop: 16, marginBottom: 8 },
-        },
-        children
-      ),
-    h3: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h3",
-        {
-          className: "text-xl font-bold mb-1.5 mt-3",
-          style: { fontSize: "20px", fontWeight: 700, marginTop: 12, marginBottom: 6 },
-        },
-        children
-      ),
-    h4: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h4",
-        {
-          className: "text-lg font-bold mb-1 mt-2",
-          style: { fontSize: "18px", fontWeight: 700, marginTop: 8, marginBottom: 4 },
-        },
-        children
-      ),
-    h5: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h5",
-        {
-          className: "text-base font-bold mb-1 mt-2",
-          style: { fontSize: "16px", fontWeight: 700, marginTop: 8, marginBottom: 4 },
-        },
-        children
-      ),
-    h6: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "h6",
-        {
-          className: "text-sm font-bold mb-0.5 mt-1.5",
-          style: { fontSize: "14px", fontWeight: 700, marginTop: 6, marginBottom: 2 },
-        },
-        children
-      ),
-    p: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "p",
-        {
-          className: "mb-2",
-          style: { marginTop: 0, marginBottom: 8 },
-        },
-        children
-      ),
-    ul: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "ul",
-        {
-          className: "mb-2 list-fixed-bullet",
-          style: { marginTop: 0, marginBottom: 8, paddingLeft: 0, listStyle: "none" },
-        },
-        children
-      ),
-    ol: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "ol",
-        {
-          className: "mb-2 list-fixed-num",
-          style: { marginTop: 0, marginBottom: 8, paddingLeft: 0, listStyle: "none" },
-        },
-        children
-      ),
-    li: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "li",
-        {
-          className: "mb-0.5",
-          // 不在测量层强行指定列表缩进：让 `.card-content ol/ul ... li` 的真实 CSS 生效，
-          // 否则会导致测量高度与预览高度不一致，从而出现 overflow hidden “丢字/跳号”。
-          style: { marginTop: 0, marginBottom: 2 },
-        },
-        children
-      ),
-    blockquote: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "blockquote",
-        {
-          className: "border-l-4 pl-3 py-1 my-2 italic opacity-90",
-          style: {
-            marginTop: 8,
-            marginBottom: 8,
-            borderLeftWidth: "4px",
-            borderLeftColor: context.accentColor,
-            paddingLeft: 12,
-            fontStyle: "italic"
-          },
-        },
-        children
-      ),
-    code: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "code",
-        {
-          className: "px-1 py-0.5 rounded text-sm",
-          style: {
-            padding: "4px 4px",
-            borderRadius: 4,
-            fontSize: "14px",
-            backgroundColor: context.codeBackground
-          },
-        },
-        children
-      ),
-    pre: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "pre",
-        {
-          style: {
-            backgroundColor: context.codeBackground,
-            padding: "12px",
-            borderRadius: 8,
-            overflowX: "auto"
-          },
-        },
-        children
-      ),
-    strong: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "strong",
-        {
-          className: "font-bold",
-          style: { fontWeight: 700, color: context.accentColor },
-        },
-        children
-      ),
-    em: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "em",
-        {
-          className: "italic",
-          style: { fontStyle: "italic" },
-        },
-        children
-      ),
-    mark: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(
-        "mark",
-        {
-          className: "rounded px-0.5 font-medium",
-          style: {
-            backgroundColor: context.accentColor,
-            color: context.backgroundColor,
-            borderRadius: 4,
-            padding: "2px 4px",
-            fontWeight: 500
-          },
-        },
-        children
-      ),
-    img: ({ src, alt }: { src?: string | Blob; alt?: string }) => {
-      const srcString = typeof src === "string" ? src : undefined;
-      return React.createElement(
-        "img",
-        {
-          src: srcString,
-          alt: alt || "",
-          style: {
-            maxWidth: "100%",
-            height: "auto",
-            marginTop: 16,
-            marginBottom: 16,
-            borderRadius: 8,
-            objectFit: "contain" as const,
-          },
-        }
-      );
-    },
-  };
+function renderMarkdownForMeasurement(markdown: string, context: RenderContext): string {
+  return renderToStaticMarkup(
+    React.createElement(CardMarkdownContent, {
+      markdown,
+      accentColor: context.accentColor,
+      backgroundColor: context.backgroundColor,
+      codeBackground: context.codeBackground,
+      blockquoteColor: context.blockquoteColor,
+    })
+  );
 }
 
 function canFitMarkdown(markdown: string, context: RenderContext): boolean {
-  const cached = getCachedFit(markdown, context);
-  if (cached !== undefined) return cached;
+  const normalized = normalizeFragment(markdown);
+  const cached = getCachedFit(normalized, context);
+  if (cached !== undefined) {
+    return cached;
+  }
 
-  const el = getMeasureContainer();
-  if (!el) return false;
+  const container = getMeasureContainer();
+  if (!container) {
+    return false;
+  }
 
-  el.style.width = `${context.contentWidth}px`;
-  el.style.fontSize = `${context.fontSize}px`;
-  el.style.lineHeight = context.lineHeightRatio.toString();
+  container.style.width = `${context.contentWidth}px`;
+  container.style.fontSize = `${context.fontSize}px`;
+  container.style.lineHeight = context.lineHeightRatio.toString();
+  container.innerHTML = renderMarkdownForMeasurement(normalized || "*空页面*", context);
 
-  const measureComponents = createMeasureComponents(context);
-
-  // 使用服务端渲染生成 HTML，然后插入到 DOM 中测量
-  const html = renderToStaticMarkup(
-    React.createElement(
-      ReactMarkdown,
-      {
-        remarkPlugins: [remarkGfm],
-        rehypePlugins: [rehypeRaw],
-        components: measureComponents,
-      },
-      preprocessHighlight(markdown || "*空页面*")
-    )
-  );
-
-  el.innerHTML = html;
-  const measuredHeight = Math.ceil(el.scrollHeight);
+  const measuredHeight = Math.ceil(container.scrollHeight);
   const maxHeight = context.contentHeight - HEIGHT_SAFETY_GAP;
   const fits = measuredHeight <= maxHeight;
-
-  setCachedFit(markdown, context, fits);
+  setCachedFit(normalized, context, fits);
   return fits;
 }
 
-function buildFenceState(lines: string[]): boolean[] {
-  const inFenceAtSplit: boolean[] = new Array(lines.length + 1).fill(false);
-  let inFence = false;
-  for (let i = 0; i < lines.length; i++) {
-    if (/^\s*```/.test(lines[i])) {
-      inFence = !inFence;
-    }
-    inFenceAtSplit[i + 1] = inFence;
+export function doesMarkdownFit(
+  markdown: string,
+  options: PaginationOptions
+): boolean {
+  if (!isBrowser) {
+    return true;
   }
-  return inFenceAtSplit;
+
+  return canFitMarkdown(markdown, getRenderContext(options));
 }
 
-function isNaturalBoundary(lines: string[], splitIndex: number): boolean {
-  if (splitIndex <= 0 || splitIndex >= lines.length) return true;
-  const prev = lines[splitIndex - 1].trim();
-  const next = lines[splitIndex].trim();
-  if (!prev || !next) return true;
-  if (next.startsWith("#")) return true;
-  if (/^[-*+]\s/.test(next) || /^\d+\.\s/.test(next)) return true;
-  return false;
+function sliceNodeMarkdown(source: string, node: Content): string {
+  const position = node.position as OffsetPosition | undefined;
+  const start = position?.start?.offset;
+  const end = position?.end?.offset;
+
+  if (typeof start === "number" && typeof end === "number") {
+    return normalizeFragment(source.slice(start, end));
+  }
+
+  return normalizeFragment(toMarkdown(node));
 }
 
-function pickSafeSplitIndex(lines: string[], bestFit: number): number {
-  if (bestFit <= 1) return 1;
-  const fenceState = buildFenceState(lines);
+function buildListItemUnit(list: List, itemIndex: number): PaginationUnit {
+  const item = list.children[itemIndex];
+  const listMarkdown = toMarkdown({
+    type: "list",
+    ordered: list.ordered,
+    start: list.ordered ? (list.start ?? 1) + itemIndex : undefined,
+    spread: list.spread,
+    children: [item],
+  });
 
-  for (let i = bestFit; i >= 1; i--) {
-    if (fenceState[i]) continue;
-    if (isNaturalBoundary(lines, i)) return i;
-  }
-
-  for (let i = bestFit; i >= 1; i--) {
-    if (!fenceState[i]) return i;
-  }
-
-  return 1;
+  return {
+    markdown: normalizeFragment(listMarkdown),
+    kind: "list-item",
+    listGroupKey: JSON.stringify({
+      ordered: !!list.ordered,
+      spread: !!list.spread,
+      checked: "checked" in item ? item.checked ?? null : null,
+    }),
+  };
 }
 
-function pickBalancedSplitIndex(
-  lines: string[],
-  bestFit: number,
-  maxLookBack = 8
-): number {
-  if (bestFit <= 1) return 1;
-  const fenceState = buildFenceState(lines);
-  const minIndex = Math.max(1, bestFit - maxLookBack);
+function segmentToUnits(segment: string): PaginationUnit[] {
+  const processor = createMarkdownProcessor();
+  const parsed = processor.parse(segment) as Root;
+  const tree = processor.runSync(parsed) as Root;
+  const units: PaginationUnit[] = [];
 
-  for (let i = bestFit; i >= minIndex; i--) {
-    if (fenceState[i]) continue;
-    if (isNaturalBoundary(lines, i)) return i;
-  }
-
-  for (let i = bestFit; i >= 1; i--) {
-    if (!fenceState[i]) return i;
-  }
-
-  return 1;
-}
-
-function pickInlineSplitAt(line: string, best: number): number {
-  const minKeep = Math.min(20, line.length);
-  for (let i = best; i >= minKeep; i--) {
-    const ch = line[i - 1];
-    if (/[。！？.!?，,；;、\s]/.test(ch)) {
-      return i;
-    }
-  }
-  return Math.max(1, best);
-}
-
-function splitSingleOverlongLine(
-  line: string,
-  context: RenderContext
-): { head: string; tail: string } {
-  if (!line) {
-    return { head: "", tail: "" };
-  }
-
-  let lo = 1;
-  let hi = line.length;
-  let best = 1;
-
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    const candidate = line.slice(0, mid);
-    if (canFitMarkdown(candidate, context)) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-
-  const splitAt = pickInlineSplitAt(line, best);
-  // 不要使用 trimEnd/trimStart，它们会删除代码块中的空格！
-  const head = line.slice(0, splitAt);
-  const tail = line.slice(splitAt);
-
-  if (!head && tail) {
-    return { head: line[0], tail: line.slice(1) };
-  }
-
-  return { head, tail };
-}
-
-function paginateSegmentByMeasurement(
-  segment: string,
-  context: RenderContext
-): string[] {
-  const pages: string[] = [];
-  let lines = segment.split("\n");
-
-  let pageCount = 0;
-  while (lines.length > 0) {
-    // 跳过开头的空行（但不是空格！）
-    while (lines.length > 0 && lines[0].length === 0) {
-      lines = lines.slice(1);
-    }
-    if (lines.length === 0) break;
-
-    const full = lines.join("\n");
-    if (canFitMarkdown(full, context)) {
-      // 只删除末尾的空行，不删除空格
-      pages.push(full.replace(/\n+$/, ""));
-      break;
-    }
-
-    let lo = 1;
-    let hi = lines.length;
-    let bestFit = 0;
-
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      const candidate = lines.slice(0, mid).join("\n");
-      if (canFitMarkdown(candidate, context)) {
-        bestFit = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-
-    if (bestFit <= 0) {
-      const { head, tail } = splitSingleOverlongLine(lines[0], context);
-      pages.push(head || "");
-      lines = tail ? [tail, ...lines.slice(1)] : lines.slice(1);
+  for (const child of tree.children) {
+    if (child.type === "list") {
+      child.children.forEach((_, itemIndex) => {
+        units.push(buildListItemUnit(child, itemIndex));
+      });
       continue;
     }
 
-    const splitIndex = pickBalancedSplitIndex(lines, bestFit);
-    const pageLines = lines.slice(0, splitIndex);
-    const remainingLines = lines.slice(splitIndex);
+    units.push({
+      markdown: sliceNodeMarkdown(segment, child),
+      kind: "block",
+    });
+  }
 
-    // 调试：检查是否有内容丢失
-    if (pageCount < 3) {  // 只记录前3页
-      console.log(`[Page ${pageCount + 1}] 取 ${splitIndex}/${lines.length} 行, 剩余 ${remainingLines.length} 行`);
-      console.log(`[Page ${pageCount + 1}] 首行: "${pageLines[0]?.substring(0, 50)}..."`);
-      console.log(`[Page ${pageCount + 1}] 末行: "${pageLines[pageLines.length - 1]?.substring(0, 50)}..."`);
-      if (remainingLines.length > 0) {
-        console.log(`[Page ${pageCount + 1}] 下一页首行: "${remainingLines[0]?.substring(0, 50)}..."`);
+  return units.filter((unit) => unit.markdown.trim().length > 0);
+}
+
+function extractComparableText(markdown: string): string {
+  const processor = createMarkdownProcessor();
+  const parsed = processor.parse(markdown) as Root;
+  const tree = processor.runSync(parsed) as Root;
+  return toString(tree).replace(/\s+/g, " ").trim();
+}
+
+function joinUnits(units: PaginationUnit[]): string {
+  if (units.length === 0) {
+    return "";
+  }
+
+  let combined = units[0].markdown;
+  for (let i = 1; i < units.length; i++) {
+    const previous = units[i - 1];
+    const current = units[i];
+    const separator =
+      previous.kind === "list-item" &&
+      current.kind === "list-item" &&
+      previous.listGroupKey === current.listGroupKey
+        ? "\n"
+        : "\n\n";
+
+    combined += `${separator}${current.markdown}`;
+  }
+
+  return combined;
+}
+
+function splitPlainText(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  const result: string[] = [];
+  for (const paragraph of paragraphs) {
+    const sentences = paragraph.match(/[^。！？!?]+[。！？!?]?|.+$/g);
+    if (!sentences || sentences.length <= 1) {
+      result.push(paragraph);
+      continue;
+    }
+
+    result.push(...sentences.map((sentence) => sentence.trim()).filter(Boolean));
+  }
+
+  return result;
+}
+
+function splitByCharacters(text: string, size = 80): string[] {
+  const normalized = text.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const chunks: string[] = [];
+  for (let index = 0; index < normalized.length; index += size) {
+    chunks.push(normalized.slice(index, index + size));
+  }
+
+  return chunks.filter(Boolean);
+}
+
+function splitOversizedUnit(
+  unit: PaginationUnit,
+  context: RenderContext
+): PaginationUnit[] {
+  if (canFitMarkdown(unit.markdown, context)) {
+    return [unit];
+  }
+
+  const plainPieces = splitPlainText(unit.markdown);
+  if (plainPieces.length > 1) {
+    const pages: PaginationUnit[] = [];
+    let bucket = "";
+
+    for (const piece of plainPieces) {
+      const candidate = bucket ? `${bucket}\n\n${piece}` : piece;
+      if (bucket && !canFitMarkdown(candidate, context)) {
+        pages.push({ markdown: bucket, kind: "block" });
+        bucket = piece;
+      } else {
+        bucket = candidate;
       }
     }
 
-    // 只删除末尾的空行，不删除空格
-    const page = pageLines.join("\n").replace(/\n+$/, "");
-    pages.push(page || "");
-    lines = remainingLines;
-    pageCount++;
+    if (bucket) {
+      pages.push({ markdown: bucket, kind: "block" });
+    }
+
+    if (pages.every((page) => canFitMarkdown(page.markdown, context))) {
+      return pages;
+    }
+  }
+
+  const lines = unit.markdown.split("\n");
+  if (lines.length > 1) {
+    const pieces: PaginationUnit[] = [];
+    let bucket: string[] = [];
+
+    for (const line of lines) {
+      const candidate = [...bucket, line].join("\n");
+      if (bucket.length > 0 && !canFitMarkdown(candidate, context)) {
+        pieces.push({ markdown: bucket.join("\n"), kind: "block" });
+        bucket = [line];
+      } else {
+        bucket.push(line);
+      }
+    }
+
+    if (bucket.length > 0) {
+      pieces.push({ markdown: bucket.join("\n"), kind: "block" });
+    }
+
+    if (pieces.every((piece) => canFitMarkdown(piece.markdown, context))) {
+      return pieces;
+    }
+  }
+
+  if (!/[#>*`_[\]\-]/.test(unit.markdown)) {
+    const chunks = splitByCharacters(unit.markdown);
+    if (chunks.length > 1) {
+      const pieces: PaginationUnit[] = [];
+      let bucket = "";
+
+      for (const chunk of chunks) {
+        const candidate = bucket ? `${bucket}${chunk}` : chunk;
+        if (bucket && !canFitMarkdown(candidate, context)) {
+          pieces.push({ markdown: bucket, kind: "block" });
+          bucket = chunk;
+        } else {
+          bucket = candidate;
+        }
+      }
+
+      if (bucket) {
+        pieces.push({ markdown: bucket, kind: "block" });
+      }
+
+      if (pieces.every((piece) => canFitMarkdown(piece.markdown, context))) {
+        return pieces;
+      }
+    }
+  }
+
+  return [unit];
+}
+
+function paginateUnitsByMeasurement(
+  units: PaginationUnit[],
+  context: RenderContext
+): string[] {
+  if (units.length === 0) {
+    return [""];
+  }
+
+  const pages: string[] = [];
+  let pageUnits: PaginationUnit[] = [];
+
+  for (const rawUnit of units) {
+    const expandedUnits = splitOversizedUnit(rawUnit, context);
+
+    for (const unit of expandedUnits) {
+      const candidateUnits = [...pageUnits, unit];
+      if (pageUnits.length === 0 || canFitMarkdown(joinUnits(candidateUnits), context)) {
+        pageUnits = candidateUnits;
+        continue;
+      }
+
+      pages.push(joinUnits(pageUnits));
+      pageUnits = [unit];
+    }
+  }
+
+  if (pageUnits.length > 0) {
+    pages.push(joinUnits(pageUnits));
   }
 
   return pages.length > 0 ? pages : [""];
 }
 
 function paginateByCharacterFallback(segment: string): string[] {
-  const maxCharsPerPage = 900;
   const lines = segment.split("\n");
   const pages: string[] = [];
   let bucket: string[] = [];
@@ -578,7 +529,7 @@ function paginateByCharacterFallback(segment: string): string[] {
 
   for (const line of lines) {
     const nextSize = size + line.length + 1;
-    if (nextSize > maxCharsPerPage && bucket.length > 0) {
+    if (nextSize > FALLBACK_TEXT_BUDGET && bucket.length > 0) {
       pages.push(bucket.join("\n").trimEnd());
       bucket = [line];
       size = line.length + 1;
@@ -595,110 +546,6 @@ function paginateByCharacterFallback(segment: string): string[] {
   return pages.length > 0 ? pages : [""];
 }
 
-function getTextBudget(options: PaginationOptions): number {
-  const base = 280;
-  const fontFactor = options.fontSize === "sm" ? 1.1 : options.fontSize === "lg" ? 0.85 : 1;
-  const densityFactor =
-    options.density === "compact" ? 1.1 : options.density === "spacious" ? 0.85 : 1;
-  return Math.max(180, Math.floor(base * fontFactor * densityFactor));
-}
-
-function weightedLength(text: string): number {
-  let total = 0;
-  for (const ch of text) {
-    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)) {
-      total += 1;
-    } else if (/\s/.test(ch)) {
-      total += 0.2;
-    } else {
-      total += 0.55;
-    }
-  }
-  return total;
-}
-
-function enforceTextBudgetForPage(page: string, budget: number): string[] {
-  if (weightedLength(page) <= budget) {
-    return [page];
-  }
-
-  const out: string[] = [];
-  let lines = page.split("\n");
-
-  while (lines.length > 0) {
-    let lo = 1;
-    let hi = lines.length;
-    let best = 1;
-
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      const candidate = lines.slice(0, mid).join("\n");
-      if (weightedLength(candidate) <= budget) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-
-    const split = pickBalancedSplitIndex(lines, best);
-    // 只删除末尾的空行，不删除空格
-    out.push(lines.slice(0, split).join("\n").replace(/\n+$/, ""));
-    lines = lines.slice(split);
-  }
-
-  return out.length > 0 ? out : [page];
-}
-
-function enforceTextBudget(pages: string[], budget: number): string[] {
-  const next: string[] = [];
-  for (const page of pages) {
-    next.push(...enforceTextBudgetForPage(page, budget));
-  }
-  return next.length > 0 ? next : [""];
-}
-
-const REBALANCE_MAX_PULL_LINES = 12;
-const REBALANCE_UNDERFILL_RATIO = 0.7;
-
-function rebalancePages(
-  pages: string[],
-  context: RenderContext,
-  budget: number
-): string[] {
-  if (!isBrowser || pages.length <= 1) return pages;
-  const result = [...pages];
-  const maxBudget = budget * 1.15;
-
-  for (let i = 0; i < result.length - 1; i++) {
-    const currentWeight = weightedLength(result[i]);
-    if (currentWeight >= budget * REBALANCE_UNDERFILL_RATIO) continue;
-
-    let currentLines = result[i].split("\n");
-    let nextLines = result[i + 1].split("\n");
-    let pulled = 0;
-
-    while (nextLines.length > 0 && pulled < REBALANCE_MAX_PULL_LINES) {
-      const candidateLines = [...currentLines, nextLines[0]];
-      const candidate = candidateLines.join("\n");
-      if (weightedLength(candidate) > maxBudget) break;
-      if (!canFitMarkdown(candidate, context)) break;
-
-      currentLines = candidateLines;
-      nextLines = nextLines.slice(1);
-      pulled++;
-    }
-
-    // 只删除末尾的空行，不删除空格
-    result[i] = currentLines.join("\n").replace(/\n+$/, "");
-    // 只删除开头的空行，不删除空格（但不能完全删除内容）
-    result[i + 1] = nextLines.length > 0 ? nextLines.join("\n") : "";
-  }
-
-  const compact = result.filter((page) => page.length > 0);
-  return compact.length > 0 ? compact : [""];
-}
-
 export function calculatePages(
   markdown: string,
   options?: PaginationOptions | number
@@ -707,10 +554,6 @@ export function calculatePages(
     return [""];
   }
 
-  // 记录输入字符数用于验证
-  const inputLength = markdown.length;
-  const inputLines = markdown.split("\n").length;
-
   const paginationOptions: PaginationOptions =
     typeof options === "number" || !options
       ? { density: "comfortable", fontSize: "md", theme: "classic" }
@@ -718,35 +561,45 @@ export function calculatePages(
 
   const segments = splitByPageBreak(markdown);
   const context = getRenderContext(paginationOptions);
-  const budget = getTextBudget(paginationOptions);
-  const allPages: string[] = [];
+  const pages: string[] = [];
 
   for (const segment of segments) {
-    const rawPages = isBrowser
-      ? paginateSegmentByMeasurement(segment, context)
-      : paginateByCharacterFallback(segment);
-    const budgetedPages = enforceTextBudget(rawPages, budget);
-    const pages = rebalancePages(budgetedPages, context, budget);
-    allPages.push(...pages);
+    if (!segment.trim()) {
+      pages.push("");
+      continue;
+    }
+
+    if (!isBrowser) {
+      pages.push(...paginateByCharacterFallback(segment));
+      continue;
+    }
+
+    const units = segmentToUnits(segment);
+    pages.push(...paginateUnitsByMeasurement(units, context));
   }
 
-  // 验证输出字符数
-  const outputLength = allPages.join("\n").length;
-  const outputLines = allPages.join("\n").split("\n").length;
+  const sourceText = extractComparableText(markdown);
+  const paginatedText = extractComparableText(pages.join("\n\n"));
 
-  // 如果字符数不一致，记录警告
-  if (Math.abs(inputLength - outputLength) > 10) {
-    console.warn(`[Pagination] 字符数不匹配: 输入 ${inputLength} 字符, ${inputLines} 行 -> 输出 ${outputLength} 字符, ${outputLines} 行`);
-    console.warn(`[Pagination] 丢字数: ${inputLength - outputLength}`);
+  if (sourceText !== paginatedText) {
+    console.warn("[Pagination] 分页结果的文本内容与源 Markdown 不一致，请检查当前拆分页逻辑。");
   }
 
-  return allPages.length > 0 ? allPages : [""];
+  if (isBrowser) {
+    const overflowPageIndex = pages.findIndex((page) => !canFitMarkdown(page, context));
+    if (overflowPageIndex >= 0) {
+      console.warn(`[Pagination] 第 ${overflowPageIndex + 1} 页分页后仍然超高，当前内容可能需要更细粒度的拆分。`);
+    }
+  }
+
+  return pages.length > 0 ? pages : [""];
 }
 
 export function cleanupMeasureContainer(): void {
   if (measureContainer?.parentNode) {
     measureContainer.parentNode.removeChild(measureContainer);
   }
+
   measureContainer = null;
   measureCache.clear();
 }

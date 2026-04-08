@@ -1,19 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
-import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
-import { useContentThemeStore } from "@/store/useContentThemeStore";
-import { calculatePages } from "@/lib/pagination";
+import { usePaginationResultStore } from "@/store/usePaginationResultStore";
 import { CARD_CONFIG } from "@/lib/constants";
 
 export function ExportOptions() {
-  const { content } = useMarkdownContentStore();
-  const { density, fontSize, theme } = useContentThemeStore();
+  const pages = usePaginationResultStore((state) => state.pages);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
-
-  const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
 
   const handleExport = () => {
     if (pages.length === 0) return;

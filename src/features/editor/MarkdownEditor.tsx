@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useEffect } from "react";
+import { EditorSelection, type SelectionRange } from "@codemirror/state";
 import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { useImageStore } from "@/store/useImageStore";
@@ -65,6 +66,7 @@ export function MarkdownEditor() {
                 const transaction = view.state.update({
                   changes: {
                     from: view.state.selection.main.from,
+                    to: view.state.selection.main.to,
                     insert: imageMarkdown,
                   },
                 });
@@ -77,6 +79,44 @@ export function MarkdownEditor() {
           return false;
         },
       }),
+    []
+  );
+
+  const boldShortcutExtension = useMemo(
+    () =>
+      keymap.of([
+        {
+          key: "Mod-b",
+          run: (view) => {
+            const changes: Array<{
+              from: number;
+              to: number;
+              insert: string;
+            }> = [];
+            const ranges: SelectionRange[] = [];
+
+            for (const range of view.state.selection.ranges) {
+              const selectedText = view.state.sliceDoc(range.from, range.to);
+              const insertedText = `**${selectedText}**`;
+              const cursorPosition = range.from + (selectedText ? insertedText.length : 2);
+
+              changes.push({
+                from: range.from,
+                to: range.to,
+                insert: insertedText,
+              });
+              ranges.push(EditorSelection.range(cursorPosition, cursorPosition));
+            }
+
+            view.dispatch({
+              changes,
+              selection: EditorSelection.create(ranges),
+            });
+
+            return true;
+          },
+        },
+      ]),
     []
   );
 
@@ -106,7 +146,12 @@ export function MarkdownEditor() {
         <CodeMirror
           value={content}
           height="100%"
-          extensions={[markdown(), EditorView.lineWrapping, pasteExtension]}
+          extensions={[
+            markdown(),
+            EditorView.lineWrapping,
+            pasteExtension,
+            boldShortcutExtension,
+          ]}
           onChange={handleChange}
           className="text-sm"
           basicSetup={CODEMIRROR_BASIC_SETUP}

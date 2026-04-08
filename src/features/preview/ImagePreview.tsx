@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
@@ -14,27 +11,24 @@ import {
   densitySpacing,
 } from "@/store/useContentThemeStore";
 import { useImageStore } from "@/store/useImageStore";
+import { usePaginationResultStore } from "@/store/usePaginationResultStore";
+import { useCardFooterStore } from "@/store/useCardFooterStore";
 import { getTemplate, getTemplateLayout, getCodeBackground } from "@/lib/templates";
 import { SketchBackground } from "@/features/preview/SketchBackground";
-import { calculatePages } from "@/lib/pagination";
-import { CARD_CONFIG, EXPORT_CONFIG } from "@/lib/constants";
+import { calculatePages, doesMarkdownFit } from "@/lib/pagination";
+import { CARD_CONFIG } from "@/lib/constants";
 import { ChevronLeftIcon } from "@/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
 import { CardHeaderAppleNotes } from "@/features/preview/CardHeaderAppleNotes";
+import {
+  CARD_FONT_FAMILY,
+  CardMarkdownContent,
+} from "@/features/preview/CardMarkdownContent";
+import { CardFooter } from "@/features/preview/CardFooter";
 import { QuoteIcon } from "@/components/icons/QuoteIcon";
 import html2canvas from "html2canvas";
-
-/** 将 ==高亮== 转为 <mark>，仅处理代码块外的内容 */
-function preprocessHighlight(md: string): string {
-  const parts = md.split(/(```[\s\S]*?```)/g);
-  return parts
-    .map((part, i) =>
-      i % 2 === 0 ? part.replace(/==([^=]+?)==/g, "<mark>$1</mark>") : part
-    )
-    .join("");
-}
 
 /** 从 Markdown 内容中提取第一句话作为文件名 */
 function extractFirstSentence(md: string): string {
@@ -70,24 +64,16 @@ function extractFirstSentence(md: string): string {
   return "rednote";
 }
 
-function getOrderedListCounterStyle(
-  counterName: string,
-  start: unknown
-): React.CSSProperties | undefined {
-  if (typeof start !== "number" || !Number.isFinite(start)) return undefined;
-  const normalizedStart = Math.max(1, Math.floor(start));
-  return { counterReset: `${counterName} ${normalizedStart - 1}` };
-}
-
 type PreviewViewMode = "pagination" | "list";
 
 export function ImagePreview() {
   const { content } = useMarkdownContentStore();
   const { theme, fontSize, density, alignment } = useContentThemeStore();
   const { images } = useImageStore();
+  const { isEnabled: isFooterEnabled, text: footerText } = useCardFooterStore();
+  const setPages = usePaginationResultStore((state) => state.setPages);
   const [currentPage, setCurrentPage] = useState(0);
-  // 渲染时直接根据 content 计算页，避免 useEffect 滞后导致预览/导出页数不对
-  const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
+  const [pages, setLocalPages] = useState<string[]>([""]);
   const exportRefs = useRef<(HTMLElement | null)[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<PreviewViewMode>("pagination");
@@ -95,6 +81,105 @@ export function ImagePreview() {
   const [visiblePageInList, setVisiblePageInList] = useState(0);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const listCardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const verificationRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const trimmedFooterText = footerText.trim();
+  const footerConfig = useMemo(
+    () => ({
+      isEnabled: isFooterEnabled && trimmedFooterText.length > 0,
+      text: trimmedFooterText,
+    }),
+    [isFooterEnabled, trimmedFooterText]
+  );
+
+  useEffect(() => {
+    const nextPages = calculatePages(content, {
+      density,
+      fontSize,
+      theme,
+      footer: footerConfig,
+    });
+    setLocalPages(nextPages);
+    setPages(nextPages);
+  }, [content, density, fontSize, theme, footerConfig, setPages]);
+
+  useEffect(() => {
+    if (pages.length === 0) {
+      return;
+    }
+
+    const paginationOptions = { density, fontSize, theme, footer: footerConfig };
+
+    const splitOverflowPage = (pageContent: string): string[] => {
+      const lines = pageContent.split("\n");
+      if (lines.length > 1) {
+        let lo = 1;
+        let hi = lines.length;
+        let best = 1;
+
+        while (lo <= hi) {
+          const mid = Math.floor((lo + hi) / 2);
+          const candidate = lines.slice(0, mid).join("\n");
+          if (doesMarkdownFit(candidate, paginationOptions)) {
+            best = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+
+        const head = lines.slice(0, best).join("\n").trimEnd();
+        const tail = lines.slice(best).join("\n").trimStart();
+        if (head && tail) {
+          return [head, tail];
+        }
+      }
+
+      let lo = 1;
+      let hi = pageContent.length;
+      let best = 1;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        const candidate = pageContent.slice(0, mid);
+        if (doesMarkdownFit(candidate, paginationOptions)) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+
+      const splitIndex = Math.max(1, best);
+      const head = pageContent.slice(0, splitIndex).trimEnd();
+      const tail = pageContent.slice(splitIndex).trimStart();
+      return tail ? [head, tail] : [pageContent];
+    };
+
+    const raf = requestAnimationFrame(() => {
+      const overflowIndex = verificationRefs.current.findIndex((element) => {
+        if (!element) {
+          return false;
+        }
+
+        return element.scrollHeight > element.clientHeight + 1;
+      });
+
+      if (overflowIndex < 0) {
+        return;
+      }
+
+      const nextPages = [...pages];
+      const replacement = splitOverflowPage(nextPages[overflowIndex]);
+      if (replacement.length <= 1) {
+        return;
+      }
+
+      nextPages.splice(overflowIndex, 1, ...replacement);
+      setLocalPages(nextPages);
+      setPages(nextPages);
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [pages, density, fontSize, theme, footerConfig, setPages]);
 
   // 内容变短时把当前页钳在有效范围内
   useEffect(() => {
@@ -246,7 +331,8 @@ export function ImagePreview() {
   const renderPage = (
     pageContent: string,
     index: number,
-    forceVisible = false
+    forceVisible = false,
+    trackExportRef = true
   ) => {
     const isVisible =
       forceVisible || index === currentPage || isExporting;
@@ -268,125 +354,43 @@ export function ImagePreview() {
           style={{
             padding: hasCustomHeader ? currentDensity.padding : 0,
             flex: 1,
-            overflow: "hidden",
+            minHeight: 0,
             lineHeight: currentDensity.lineHeight,
             textAlign: alignment,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
-          <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw]}
-          components={{
-            h1: ({ children }) => (
-              <h1 className="text-4xl font-bold mb-2 mt-0">{children}</h1>
-            ),
-            h2: ({ children }) => (
-              <h2 className="text-2xl font-bold mb-2 mt-4">{children}</h2>
-            ),
-            h3: ({ children }) => (
-              <h3 className="text-xl font-bold mb-1.5 mt-3">{children}</h3>
-            ),
-            h4: ({ children }) => (
-              <h4 className="text-lg font-bold mb-1 mt-2">{children}</h4>
-            ),
-            h5: ({ children }) => (
-              <h5 className="text-base font-bold mb-1 mt-2">{children}</h5>
-            ),
-            h6: ({ children }) => (
-              <h6 className="text-sm font-bold mb-0.5 mt-1.5">{children}</h6>
-            ),
-            p: ({ children }) => (
-              <p className="mb-2" style={{ lineHeight: "inherit" }}>{children}</p>
-            ),
-            ul: ({ children }) => (
-              <ul className="mb-2 list-fixed-bullet">{children}</ul>
-            ),
-            ol: ({ children, start }) => (
-              <ol
-                className="mb-2 list-fixed-num"
-                style={getOrderedListCounterStyle("list-num", start)}
-              >
-                {children}
-              </ol>
-            ),
-            li: ({ children }) => <li className="mb-0.5">{children}</li>,
-            code: ({ children }) => (
-              <code
-                className="px-1 py-0.5 rounded text-sm"
-                style={{ backgroundColor: codeBg }}
-              >
-                {children}
-              </code>
-            ),
-            strong: ({ children }) => (
-              <strong
-                className="font-bold"
-                style={{ color: currentColors.accent }}
-              >
-                {children}
-              </strong>
-            ),
-            em: ({ children }) => <em className="italic">{children}</em>,
-            mark: ({ children }) => (
-              <mark
-                className="rounded px-0.5 font-medium"
-                style={{ backgroundColor: currentColors.accent, color: currentColors.background }}
-              >
-                {children}
-              </mark>
-            ),
-            blockquote: ({ children }) => (
-              <blockquote
-                className="border-l-4 pl-3 py-1 my-2 italic opacity-90"
-                style={{ borderColor: blockquoteColor }}
-              >
-                {children}
-              </blockquote>
-            ),
-            img: ({ src, alt }) => {
-              // Check if src is an image ID from pasted image
-              if (typeof src === "string" && src.startsWith("img-")) {
-                const pastedImage = images.find((img) => img.id === src);
-                if (pastedImage) {
-                  return (
-                    <img
-                      src={pastedImage.dataUrl}
-                      alt={alt || pastedImage.name || "Pasted image"}
-                      className="my-4 rounded-lg"
-                      style={{
-                        maxWidth: "100%",
-                        height: "auto",
-                        objectFit: "contain",
-                      }}
-                    />
-                  );
-                }
-              }
-              // For external images, render as-is
-              return (
-                <img
-                  src={typeof src === "string" ? src : undefined}
-                  alt={alt || ""}
-                  className="my-4 rounded-lg"
-                  style={{
-                    maxWidth: "100%",
-                    height: "auto",
-                    objectFit: "contain",
-                  }}
-                />
-              );
-            },
-          }}
-        >
-          {preprocessHighlight(pageContent || "*空页面*")}
-        </ReactMarkdown>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <CardMarkdownContent
+              markdown={pageContent}
+              accentColor={currentColors.accent}
+              backgroundColor={currentColors.background}
+              codeBackground={codeBg}
+              blockquoteColor={blockquoteColor}
+              images={images}
+            />
+          </div>
+          {footerConfig.isEnabled && (
+            <CardFooter text={footerConfig.text} accentColor={currentColors.accent} />
+          )}
         </div>
       </>
     );
 
+    const setExportRef = (element: HTMLElement | null) => {
+      if (!trackExportRef) {
+        return;
+      }
+
+      exportRefs.current[index] = element;
+    };
+
     const contentStyle: React.CSSProperties = {
       color: currentColors.text,
       fontSize: currentFontSize,
+      fontFamily: CARD_FONT_FAMILY,
       padding: hasCustomHeader ? 0 : currentDensity.padding,
       lineHeight: currentDensity.lineHeight,
       textAlign: alignment,
@@ -407,9 +411,7 @@ export function ImagePreview() {
       return (
         <div
           key={index}
-          ref={(el) => {
-            exportRefs.current[index] = el;
-          }}
+          ref={setExportRef}
           className="card-content rounded-lg"
           style={{ position: "relative", ...contentStyle }}
         >
@@ -439,9 +441,7 @@ export function ImagePreview() {
       return (
         <div
           key={index}
-          ref={(el) => {
-            exportRefs.current[index] = el;
-          }}
+          ref={setExportRef}
           className="card-content rounded-lg"
           style={{
             ...contentStyle,
@@ -482,9 +482,7 @@ export function ImagePreview() {
     return (
       <div
         key={index}
-        ref={(el) => {
-          exportRefs.current[index] = el;
-        }}
+        ref={setExportRef}
         className="card-content rounded-lg"
         style={{
           ...contentStyle,
@@ -629,21 +627,21 @@ export function ImagePreview() {
               }}
             >
               {isExporting ? (
-            <div className="absolute inset-0">
-              {pages.map((page, index) => (
-                <div
-                  key={index}
-                  ref={(el) => {
-                    exportRefs.current[index] = el;
-                  }}
-                  className="absolute inset-0"
-                  style={{ width: "100%", height: "100%" }}
-                >
-                  {renderPage(page, index, true)}
+                <div className="absolute inset-0">
+                  {pages.map((page, index) => (
+                    <div
+                      key={index}
+                      ref={(el) => {
+                        exportRefs.current[index] = el;
+                      }}
+                      className="absolute inset-0"
+                      style={{ width: "100%", height: "100%" }}
+                    >
+                      {renderPage(page, index, true)}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
+              ) : (
                 // Show only current page for preview
                 <div className="w-full h-full">
                   {renderPage(pages[currentPage] || "", currentPage)}
@@ -652,6 +650,27 @@ export function ImagePreview() {
             </div>
           </div>
         )}
+      </div>
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-[26000px] top-0 opacity-0"
+      >
+        {pages.map((pageContent, index) => (
+          <div
+            key={`verify-${index}`}
+            ref={(element) => {
+              verificationRefs.current[index] = element;
+            }}
+            className="overflow-hidden"
+            style={{
+              width: `${CARD_CONFIG.width}px`,
+              height: `${CARD_CONFIG.height}px`,
+            }}
+          >
+            {renderPage(pageContent, index, true, false)}
+          </div>
+        ))}
       </div>
     </div>
   );

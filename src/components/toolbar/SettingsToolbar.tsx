@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   themeColors,
   useContentThemeStore,
-  type Theme,
   type FontSize,
   type Density,
   type Alignment,
 } from "@/store/useContentThemeStore";
 import { themeLabels, THEME_IDS } from "@/lib/templates";
-import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
-import { calculatePages } from "@/lib/pagination";
+import { useCardFooterStore } from "@/store/useCardFooterStore";
+import { usePaginationResultStore } from "@/store/usePaginationResultStore";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
 
 const fontSizeLabels: Record<FontSize, string> = {
@@ -35,14 +34,19 @@ const alignmentLabels: Record<Alignment, string> = {
 export function SettingsToolbar() {
   const { theme, fontSize, density, alignment, setTheme, setFontSize, setDensity, setAlignment } =
     useContentThemeStore();
-  const { content } = useMarkdownContentStore();
+  const {
+    isEnabled: isFooterEnabled,
+    text: footerText,
+    setEnabled: setFooterEnabled,
+    setText: setFooterText,
+  } = useCardFooterStore();
+  const pages = usePaginationResultStore((state) => state.pages);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
-  const pages = useMemo(() => calculatePages(content, { density, fontSize, theme }), [content, density, fontSize, theme]);
   const totalPages = pages.length;
 
   // 同步：当页数变化时，默认全选
@@ -78,7 +82,6 @@ export function SettingsToolbar() {
     setSelectedIndices([]);
   };
   const allSelected = selectedIndices.length === totalPages && totalPages > 0;
-  const noneSelected = selectedIndices.length === 0;
 
   const handleExport = () => {
     if (selectedIndices.length === 0) return;
@@ -200,6 +203,28 @@ export function SettingsToolbar() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="w-px h-6 bg-apple-border" />
+
+      <div className="flex items-center gap-2 min-w-0">
+        <label className="flex items-center gap-2 text-xs font-medium text-gray-500 shrink-0">
+          <input
+            type="checkbox"
+            checked={isFooterEnabled}
+            onChange={(event) => setFooterEnabled(event.target.checked)}
+            className="rounded border-gray-300 text-apple-blue focus:ring-apple-blue"
+          />
+          页尾
+        </label>
+        <input
+          type="text"
+          value={footerText}
+          onChange={(event) => setFooterText(event.target.value)}
+          placeholder="输入自定义页尾"
+          disabled={!isFooterEnabled}
+          className="w-72 max-w-[32vw] rounded-lg border border-apple-border px-3 py-1.5 text-sm text-gray-700 outline-none transition focus:border-apple-blue disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+        />
       </div>
 
       <div className="flex-1" />
