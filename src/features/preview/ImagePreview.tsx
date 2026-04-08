@@ -616,6 +616,7 @@ export function ImagePreview() {
             key={`verify-${index}`}
             ref={(element) => {
               verificationRefs.current[index] = element;
+              exportRefs.current[index] = element;
             }}
             className="overflow-hidden"
             style={{
@@ -623,7 +624,7 @@ export function ImagePreview() {
               height: `${CARD_CONFIG.previewHeight}px`,
             }}
           >
-            {renderPage(pageContent, index, true, true)}
+            {renderPage(pageContent, index, true, false)}
           </div>
         ))}
       </div>
