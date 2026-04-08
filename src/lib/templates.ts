@@ -91,7 +91,7 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     },
     layout: "default",
     blockquoteColor: "#F59E0B",
-    cardFrame: { topLine: true, sideMarginPercent: 8 },
+    cardFrame: { topLine: false, sideMarginPercent: 8 },
     codeBackground: "rgba(232,93,63,0.08)",
   },
   {
