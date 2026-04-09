@@ -4,8 +4,6 @@ import type { CSSProperties, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
-import lennyAvatar from "@/public/lenny-avatar.png";
-import lennyHeadshot from "@/public/lenny_headshot.png";
 
 export const CARD_FONT_FAMILY =
   '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -29,8 +27,8 @@ interface CardMarkdownContentProps extends CreateMarkdownComponentsOptions {
 }
 
 const BUILTIN_IMAGE_ASSETS: Record<string, string> = {
-  "asset:lenny-avatar": lennyAvatar.src,
-  "asset:lenny-headshot": lennyHeadshot.src,
+  "asset:lenny-avatar": "/lenny-avatar.png",
+  "asset:lenny-headshot": "/lenny_headshot.png",
 };
 
 function getOrderedListCounterStyle(
