@@ -9,7 +9,7 @@ export const LENNY_COVER_PRESET =
   '  </div>\n' +
   '  <div class="rn-lenny-photo">\n' +
   '    <div class="rn-lenny-photo-frame">\n' +
-  '      <img class="rn-lenny-photo-image" src="asset:lenny-headshot" alt="Lenny Rachitsky" />\n' +
+  '      <img class="rn-lenny-photo-image" src="/lenny_headshot.png" alt="Lenny Rachitsky" />\n' +
   "    </div>\n" +
   '    <p>前 Airbnb 产品负责人 Lenny Rachitsky</p>\n' +
   "  </div>\n" +
