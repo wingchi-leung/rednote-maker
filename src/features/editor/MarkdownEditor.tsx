@@ -6,7 +6,9 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView, keymap } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
+import { useContentThemeStore } from "@/store/useContentThemeStore";
 import { useImageStore } from "@/store/useImageStore";
+import { LENNY_COVER_PRESET } from "@/lib/presetContents";
 import { ResetIcon } from "@/components/icons/ResetIcon";
 import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
@@ -20,6 +22,7 @@ const CODEMIRROR_BASIC_SETUP = {
 
 export function MarkdownEditor() {
   const { content, setContent, resetContent } = useMarkdownContentStore();
+  const { setTheme, setDensity, setFontSize, setAlignment } = useContentThemeStore();
   const addImage = useImageStore((state) => state.addImage);
 
   // Use ref to store the latest addImage to avoid recreating the extension
@@ -34,6 +37,14 @@ export function MarkdownEditor() {
     },
     [setContent]
   );
+
+  const handleInsertLennyPreset = useCallback(() => {
+    setContent(LENNY_COVER_PRESET);
+    setTheme("lennyCover");
+    setDensity("compact");
+    setFontSize("md");
+    setAlignment("left");
+  }, [setAlignment, setContent, setDensity, setFontSize, setTheme]);
 
   // Create a stable CodeMirror extension to handle paste events
   // Using ref ensures the extension is created only once
@@ -125,6 +136,13 @@ export function MarkdownEditor() {
       <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleInsertLennyPreset}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-[#8B4A2E] hover:bg-[#F8EFE6] transition-colors"
+          >
+            套用 Lenny 封面
+          </button>
           <button
             type="button"
             onClick={resetContent}

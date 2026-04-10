@@ -1,113 +1,321 @@
 "use client";
 
 import { CARD_FONT_FAMILY } from "@/features/preview/CardMarkdownContent";
+import type { Alignment } from "@/store/useContentThemeStore";
 
 interface CardLennyCoverProps {
   accentColor: string;
   textColor: string;
+  markdown: string;
+  fontSize: number;
+  alignment: Alignment;
 }
 
-export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) {
+interface LennyCoverContent {
+  title: string;
+  bodyLines: string[];
+  summaryLines: string[];
+}
+
+function stripMarkdownSyntax(value: string): string {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_~`>#-]/g, "")
+    .trim();
+}
+
+function extractCoverContent(markdown: string): LennyCoverContent {
+  const lines = markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const headingLine = lines.find((line) => /^#\s+/.test(line));
+  const title = stripMarkdownSyntax(headingLine?.replace(/^#\s+/, "") ?? "");
+
+  const contentLines = lines.filter((line) => !/^#\s+/.test(line));
+  const separatorIndex = contentLines.findIndex((line) => line === "@@@");
+
+  const topSectionLines =
+    separatorIndex >= 0
+      ? contentLines.slice(0, separatorIndex)
+      : contentLines.slice(0, 2);
+  const bottomSectionLines =
+    separatorIndex >= 0
+      ? contentLines.slice(separatorIndex + 1)
+      : contentLines.slice(2);
+
+  const bodyLines = topSectionLines
+    .map((line) => stripMarkdownSyntax(line))
+    .filter((line) => line.length > 0)
+    .slice(0, 8);
+  const summaryLines = bottomSectionLines
+    .map((line) => stripMarkdownSyntax(line))
+    .filter((line) => line.length > 0)
+    .slice(0, 3);
+
+  return { title, bodyLines, summaryLines };
+}
+
+function getTitleFontSize(baseFontSize: number, title: string): number {
+  const length = Array.from(title).length;
+
+  if (length <= 8) {
+    return Math.round(baseFontSize * 3.8);
+  }
+
+  if (length <= 14) {
+    return Math.round(baseFontSize * 3.1);
+  }
+
+  if (length <= 22) {
+    return Math.round(baseFontSize * 2.6);
+  }
+
+  return Math.round(baseFontSize * 2.2);
+}
+
+export function CardLennyCover({
+  accentColor,
+  textColor,
+  markdown,
+  fontSize,
+  alignment,
+}: CardLennyCoverProps) {
+  const { title, bodyLines, summaryLines } = extractCoverContent(markdown);
+  const hasTitle = title.length > 0;
+  const hasBody = bodyLines.length > 0;
+  const hasSummary = summaryLines.length > 0;
+  const textAlign = alignment === "justify" ? "left" : alignment;
+  const titleFontSize = getTitleFontSize(fontSize, title);
+
   return (
     <div
       style={{
-        fontFamily: CARD_FONT_FAMILY,
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
+        position: "absolute",
+        inset: 0,
         overflow: "hidden",
         backgroundColor: "#FFFFFF",
+        fontFamily: CARD_FONT_FAMILY,
       }}
     >
-      {/* 上方白色区（40%）：左侧 bio，右下角小圆头像 */}
       <div
         style={{
-          flex: "2 0 0",
-          position: "relative",
-          padding: "32px 36px 28px 36px",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "flex-end",
-          backgroundColor: "#FFFFFF",
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, #FFFDFB 0%, #FFF9F3 36%, #FAECE1 36%, #F7E8DC 100%)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 32,
+          left: 34,
+          width: 73,
+          height: 6,
+          borderRadius: 999,
+          backgroundColor: accentColor,
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          top: 38,
+          right: 24,
+          fontSize: `${Math.max(10, Math.round(fontSize * 0.72))}px`,
+          fontWeight: 300,
+          color: "#A6A09A",
+          lineHeight: 1.7,
+          letterSpacing: "0.04em",
+          textAlign: "right",
+          whiteSpace: "pre-line",
+          zIndex: 3,
         }}
       >
-        {/* 左侧作者信息，垂直居底 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <span
-            style={{
-              fontSize: "14px",
-              fontWeight: 700,
-              color: textColor,
-              lineHeight: 1.3,
-            }}
-          >
-            Lenny Rachitsky
-          </span>
-          <span
-            style={{
-              fontSize: "11px",
-              color: "#AAAAAA",
-              lineHeight: 1.8,
-            }}
-          >
-            前 Airbnb 产品经理
-            <br />
-            打造百万 Newsletter 的内容创作者
-          </span>
-        </div>
+        {"百万订阅作者\n智能知识库"}
+      </div>
 
-        {/* 右下角小圆头像 */}
+      {hasTitle && (
+        <div
+          style={{
+            position: "absolute",
+            top: 58,
+            left: 34,
+            right: 34,
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              fontSize: `${Math.round(fontSize * 0.95)}px`,
+              fontWeight: 700,
+              color: accentColor,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 14,
+            }}
+          >
+            Lenny Podcast
+          </div>
+          <h1
+            style={{
+              margin: 0,
+              maxWidth: 320,
+              fontSize: `${titleFontSize}px`,
+              fontWeight: 800,
+              color: textColor,
+              lineHeight: 1.1,
+              letterSpacing: "-0.05em",
+              textAlign,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {title}
+          </h1>
+        </div>
+      )}
+
+      <div
+        style={{
+          position: "absolute",
+          right: 26,
+          bottom: 46,
+          width: 212,
+          height: 212,
+          borderRadius: "50%",
+          overflow: "hidden",
+          boxShadow: "0 24px 48px rgba(42, 30, 20, 0.16)",
+          zIndex: 1,
+        }}
+      >
         <img
           src="/lenny_headshot.png"
           alt="Lenny Rachitsky"
           style={{
-            position: "absolute",
-            right: "36px",
-            bottom: "24px",
-            width: "80px",
-            height: "80px",
+            width: "100%",
+            height: "100%",
             borderRadius: "50%",
             objectFit: "cover",
-            border: `2.5px solid ${accentColor}`,
+            objectPosition: "center top",
+            display: "block",
           }}
         />
       </div>
 
-      {/* 分隔线 */}
       <div
         style={{
-          height: "1px",
-          backgroundColor: "#EBEBEB",
-          flexShrink: 0,
-        }}
-      />
-
-      {/* 下方 #FAECE1 区（60%）：大标题，视觉重心 */}
-      <div
-        style={{
-          flex: "3 0 0",
-          backgroundColor: "#FAECE1",
-          padding: "36px 36px 40px 36px",
-          boxSizing: "border-box",
+          position: "absolute",
+          right: 38,
+          top: hasTitle ? 246 : 58,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
+          alignItems: "flex-end",
+          gap: 6,
+          zIndex: 2,
         }}
       >
-        {/* 标题留空，用户填写 */}
-        <p
+        <div
           style={{
-            margin: 0,
-            fontSize: "32px",
-            fontWeight: 800,
-            color: textColor,
-            lineHeight: 1.35,
-            letterSpacing: "-0.5px",
+            width: 44,
+            height: 2,
+            backgroundColor: accentColor,
+            opacity: 0.8,
           }}
         />
+        <div
+          style={{
+            fontSize: `${Math.round(fontSize * 0.9)}px`,
+            lineHeight: 1.5,
+            color: "#7A746D",
+            textAlign: "right",
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "#433F3B" }}>Lenny Rachitsky</div>
+          <div>前 Airbnb PM</div>
+          <div>Lenny newsletter</div>
+        </div>
       </div>
+
+      {hasBody && (
+        <div
+          style={{
+            position: "absolute",
+            left: 36,
+            top: hasTitle ? 232 : 132,
+            width: 176,
+            maxHeight: 248,
+            overflow: "hidden",
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              fontSize: `${Math.round(fontSize * 1.08)}px`,
+              lineHeight: 1.86,
+              color: "#4A433D",
+              fontWeight: 420,
+              textAlign: "left",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {bodyLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                style={{ margin: index === bodyLines.length - 1 ? 0 : "0 0 12px" }}
+              >
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hasSummary && (
+        <div
+          style={{
+            position: "absolute",
+            left: 36,
+            right: 220,
+            bottom: 72,
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              width: 60,
+              height: 2,
+              backgroundColor: accentColor,
+              marginBottom: 16,
+              opacity: 0.8,
+            }}
+          />
+          <div
+            style={{
+              maxWidth: 190,
+              fontSize: `${Math.round(fontSize * 1.02)}px`,
+              lineHeight: 1.76,
+              color: "#8E8378",
+              fontWeight: 400,
+              textAlign,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {summaryLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                style={{ margin: index === summaryLines.length - 1 ? 0 : "0 0 10px" }}
+              >
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

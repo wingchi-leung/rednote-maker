@@ -327,7 +327,7 @@ export function ImagePreview() {
       exportRefs.current[index] = element;
     };
 
-    // Lenny 封面：专属布局，忽略 markdown 内容
+    // Lenny 封面：专属布局，但标题与文案仍来自 markdown
     if (layout === "lennyCover") {
       return (
         <div
@@ -335,16 +335,20 @@ export function ImagePreview() {
           ref={setExportRef}
           className="card-content rounded-lg"
           style={{
-            width: "100%",
-            height: "100%",
+            width: `${CARD_CONFIG.previewWidth}px`,
+            height: `${CARD_CONFIG.previewHeight}px`,
+            position: "relative",
             overflow: "hidden",
-            boxSizing: "border-box",
+            flexShrink: 0,
             ...displayStyle,
           }}
         >
           <CardLennyCover
             accentColor={currentColors.accent}
             textColor={currentColors.text}
+            markdown={pageContent}
+            fontSize={Number.parseInt(currentFontSize, 10)}
+            alignment={alignment}
           />
         </div>
       );
