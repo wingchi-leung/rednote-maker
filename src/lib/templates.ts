@@ -7,7 +7,7 @@
  * - codeBackground: 可选，代码块背景色（不填则用默认浅色）
  */
 
-export type TemplateLayout = "default" | "appleNotes";
+export type TemplateLayout = "default" | "appleNotes" | "lennyCover";
 
 /** 卡片背景装饰：sketch = 白底 + 有机线条 + 细微网格，线条色用 colors.accent */
 export type TemplateDecoration = "sketch";
@@ -89,9 +89,8 @@ export const TEMPLATES: readonly TemplateConfig[] = [
       text: "#1A1A1A",
       accent: "#E85D3F",
     },
-    layout: "default",
+    layout: "lennyCover",
     blockquoteColor: "#F59E0B",
-    cardFrame: { topLine: false, sideMarginPercent: 8 },
     codeBackground: "rgba(232,93,63,0.08)",
   },
   {

@@ -22,6 +22,7 @@ import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
 import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
 import { CardHeaderAppleNotes } from "@/features/preview/CardHeaderAppleNotes";
+import { CardLennyCover } from "@/features/preview/CardLennyCover";
 import {
   CARD_FONT_FAMILY,
   CardMarkdownContent,
@@ -318,6 +319,38 @@ export function ImagePreview() {
     const codeBg = getCodeBackground(theme);
     const blockquoteColor = template.blockquoteColor ?? currentColors.accent;
 
+    const setExportRef = (element: HTMLElement | null) => {
+      if (!trackExportRef) {
+        return;
+      }
+
+      exportRefs.current[index] = element;
+    };
+
+    // Lenny 封面：专属布局，忽略 markdown 内容
+    if (layout === "lennyCover") {
+      return (
+        <div
+          key={index}
+          ref={setExportRef}
+          className="card-content rounded-lg"
+          style={{
+            width: "100%",
+            minHeight: "100%",
+            maxHeight: "100%",
+            overflow: "hidden",
+            boxSizing: "border-box",
+            ...displayStyle,
+          }}
+        >
+          <CardLennyCover
+            accentColor={currentColors.accent}
+            textColor={currentColors.text}
+          />
+        </div>
+      );
+    }
+
     const cardContent = (
       <>
         {layout === "appleNotes" && (
@@ -351,14 +384,6 @@ export function ImagePreview() {
         </div>
       </>
     );
-
-    const setExportRef = (element: HTMLElement | null) => {
-      if (!trackExportRef) {
-        return;
-      }
-
-      exportRefs.current[index] = element;
-    };
 
     const contentStyle: React.CSSProperties = {
       color: currentColors.text,
