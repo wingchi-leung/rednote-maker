@@ -28,8 +28,8 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
           flex: "2 0 0",
           display: "flex",
           alignItems: "center",
-          padding: "0 32px",
-          gap: "18px",
+          padding: "0 40px",
+          gap: "24px",
           boxSizing: "border-box",
         }}
       >
@@ -38,32 +38,33 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
           src="/lenny_headshot.png"
           alt="Lenny Rachitsky"
           style={{
-            width: "72px",
-            height: "72px",
+            width: "108px",
+            height: "108px",
             borderRadius: "50%",
             objectFit: "cover",
             flexShrink: 0,
-            border: `2px solid ${accentColor}`,
+            border: `3px solid ${accentColor}`,
           }}
         />
 
         {/* 介绍文字 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <span
             style={{
-              fontSize: "15px",
-              fontWeight: 600,
+              fontSize: "22px",
+              fontWeight: 700,
               color: textColor,
-              lineHeight: 1.3,
+              lineHeight: 1.2,
+              letterSpacing: "-0.3px",
             }}
           >
             Lenny Rachitsky
           </span>
           <span
             style={{
-              fontSize: "12px",
+              fontSize: "13px",
               color: "#999999",
-              lineHeight: 1.5,
+              lineHeight: 1.7,
             }}
           >
             前 Airbnb 产品经理
