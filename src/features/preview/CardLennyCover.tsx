@@ -3,8 +3,6 @@
 import { CARD_FONT_FAMILY } from "@/features/preview/CardMarkdownContent";
 
 interface CardLennyCoverProps {
-  /** 标题区域的 Markdown 内容（暂未渲染，留作扩展） */
-  titleText?: string;
   accentColor: string;
   textColor: string;
 }
@@ -22,49 +20,36 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
         backgroundColor: "#FFFFFF",
       }}
     >
-      {/* 上方 40%：头像居左 + 介绍文字 */}
+      {/* 上方白色区（40%）：左侧 bio，右下角小圆头像 */}
       <div
         style={{
           flex: "2 0 0",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 40px",
-          gap: "24px",
+          position: "relative",
+          padding: "32px 36px 28px 36px",
           boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          backgroundColor: "#FFFFFF",
         }}
       >
-        {/* 头像 */}
-        <img
-          src="/lenny_headshot.png"
-          alt="Lenny Rachitsky"
-          style={{
-            width: "108px",
-            height: "108px",
-            borderRadius: "50%",
-            objectFit: "cover",
-            flexShrink: 0,
-            border: `3px solid ${accentColor}`,
-          }}
-        />
-
-        {/* 介绍文字 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {/* 左侧作者信息，垂直居底 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <span
             style={{
-              fontSize: "22px",
+              fontSize: "14px",
               fontWeight: 700,
               color: textColor,
-              lineHeight: 1.2,
-              letterSpacing: "-0.3px",
+              lineHeight: 1.3,
             }}
           >
             Lenny Rachitsky
           </span>
           <span
             style={{
-              fontSize: "13px",
-              color: "#999999",
-              lineHeight: 1.7,
+              fontSize: "11px",
+              color: "#AAAAAA",
+              lineHeight: 1.8,
             }}
           >
             前 Airbnb 产品经理
@@ -72,38 +57,56 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
             打造百万 Newsletter 的内容创作者
           </span>
         </div>
+
+        {/* 右下角小圆头像 */}
+        <img
+          src="/lenny_headshot.png"
+          alt="Lenny Rachitsky"
+          style={{
+            position: "absolute",
+            right: "36px",
+            bottom: "24px",
+            width: "80px",
+            height: "80px",
+            borderRadius: "50%",
+            objectFit: "cover",
+            border: `2.5px solid ${accentColor}`,
+          }}
+        />
       </div>
 
-      {/* 下方 60%：标题区域，背景 #FAECE1，留空 */}
+      {/* 分隔线 */}
+      <div
+        style={{
+          height: "1px",
+          backgroundColor: "#EBEBEB",
+          flexShrink: 0,
+        }}
+      />
+
+      {/* 下方 #FAECE1 区（60%）：大标题，视觉重心 */}
       <div
         style={{
           flex: "3 0 0",
           backgroundColor: "#FAECE1",
-          padding: "32px",
+          padding: "36px 36px 40px 36px",
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
         }}
       >
-        {/* 标题占位区域 —— 用户可在此填写标题 */}
-        <div
+        {/* 标题留空，用户填写 */}
+        <p
           style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
+            margin: 0,
+            fontSize: "32px",
+            fontWeight: 800,
+            color: textColor,
+            lineHeight: 1.35,
+            letterSpacing: "-0.5px",
           }}
-        >
-          <span
-            style={{
-              fontSize: "28px",
-              fontWeight: 700,
-              color: textColor,
-              lineHeight: 1.4,
-            }}
-          />
-        </div>
+        />
       </div>
     </div>
   );
