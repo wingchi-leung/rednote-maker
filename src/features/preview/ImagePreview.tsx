@@ -336,8 +336,7 @@ export function ImagePreview() {
           className="card-content rounded-lg"
           style={{
             width: "100%",
-            minHeight: "100%",
-            maxHeight: "100%",
+            height: "100%",
             overflow: "hidden",
             boxSizing: "border-box",
             ...displayStyle,

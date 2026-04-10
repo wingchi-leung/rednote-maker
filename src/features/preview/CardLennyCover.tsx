@@ -25,7 +25,7 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
       {/* 上方 40%：头像居左 + 介绍文字 */}
       <div
         style={{
-          flex: "0 0 40%",
+          flex: "2 0 0",
           display: "flex",
           alignItems: "center",
           padding: "0 32px",
@@ -76,7 +76,7 @@ export function CardLennyCover({ accentColor, textColor }: CardLennyCoverProps) 
       {/* 下方 60%：标题区域，背景 #FAECE1，留空 */}
       <div
         style={{
-          flex: "0 0 60%",
+          flex: "3 0 0",
           backgroundColor: "#FAECE1",
           padding: "32px",
           boxSizing: "border-box",
