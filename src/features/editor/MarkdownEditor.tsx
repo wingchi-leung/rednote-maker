@@ -20,7 +20,11 @@ const CODEMIRROR_BASIC_SETUP = {
   indentOnInput: true,
 };
 
-export function MarkdownEditor() {
+interface MarkdownEditorProps {
+  showLennyPreset?: boolean;
+}
+
+export function MarkdownEditor({ showLennyPreset = false }: MarkdownEditorProps) {
   const { content, setContent, resetContent } = useMarkdownContentStore();
   const { setTheme, setDensity, setFontSize, setAlignment } = useContentThemeStore();
   const addImage = useImageStore((state) => state.addImage);
@@ -136,13 +140,15 @@ export function MarkdownEditor() {
       <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleInsertLennyPreset}
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-[#8B4A2E] hover:bg-[#F8EFE6] transition-colors"
-          >
-            套用 Lenny 封面
-          </button>
+          {showLennyPreset && (
+            <button
+              type="button"
+              onClick={handleInsertLennyPreset}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-[#8B4A2E] hover:bg-[#F8EFE6] transition-colors"
+            >
+              套用 Lenny 封面
+            </button>
+          )}
           <button
             type="button"
             onClick={resetContent}

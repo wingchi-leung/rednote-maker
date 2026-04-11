@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, type ChangeEvent } from "react";
 import {
   getStrongTextColor,
   themeColors,
@@ -12,9 +12,10 @@ import {
 import {
   getDefaultStrongTextColor,
   themeLabels,
-  THEME_IDS,
+  type Theme,
 } from "@/lib/templates";
 import { useCardFooterStore } from "@/store/useCardFooterStore";
+import { useImageStore } from "@/store/useImageStore";
 import { usePaginationResultStore } from "@/store/usePaginationResultStore";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
 
@@ -36,7 +37,15 @@ const alignmentLabels: Record<Alignment, string> = {
   justify: "双",
 };
 
-export function SettingsToolbar() {
+interface SettingsToolbarProps {
+  themeIds: Theme[];
+  showLennyTools?: boolean;
+}
+
+export function SettingsToolbar({
+  themeIds,
+  showLennyTools = false,
+}: SettingsToolbarProps) {
   const {
     theme,
     fontSize,
@@ -56,12 +65,14 @@ export function SettingsToolbar() {
     setEnabled: setFooterEnabled,
     setText: setFooterText,
   } = useCardFooterStore();
+  const { coverImage, setCoverImage, clearCoverImage } = useImageStore();
   const pages = usePaginationResultStore((state) => state.pages);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
 
   const totalPages = pages.length;
   const strongTextColor = getStrongTextColor(theme, strongTextColorOverrides);
@@ -117,13 +128,51 @@ export function SettingsToolbar() {
     window.dispatchEvent(event);
   };
 
+  const handleOpenCoverImagePicker = useCallback(() => {
+    coverImageInputRef.current?.click();
+  }, []);
+
+  const handleCoverImageChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        const dataUrl = loadEvent.target?.result;
+        if (typeof dataUrl !== "string") {
+          return;
+        }
+
+        setCoverImage({
+          id: `cover-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          dataUrl,
+          name: file.name,
+        });
+      };
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    },
+    [setCoverImage]
+  );
+
   return (
     <div className="bg-white border-b border-apple-border px-4 py-2 flex items-center gap-6 flex-wrap">
+      <input
+        ref={coverImageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleCoverImageChange}
+        className="hidden"
+      />
+
       {/* Theme Selection */}
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium text-gray-500">主题</span>
         <div className="flex gap-1">
-          {THEME_IDS.map((key) => (
+          {themeIds.map((key) => (
             <button
               key={key}
               onClick={() => setTheme(key)}
@@ -184,6 +233,42 @@ export function SettingsToolbar() {
       </div>
 
       <div className="w-px h-6 bg-apple-border" />
+
+      {showLennyTools && theme === "lennyCover" && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-500">人物图</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenCoverImagePicker}
+                className="rounded-lg border border-apple-border px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                {coverImage ? "更换图片" : "上传图片"}
+              </button>
+              {coverImage && (
+                <>
+                  <span
+                    className="max-w-28 truncate text-xs text-gray-500"
+                    title={coverImage.name || "已上传人物图"}
+                  >
+                    {coverImage.name || "已上传人物图"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearCoverImage}
+                    className="rounded px-2 py-1 text-xs font-medium text-apple-blue hover:bg-blue-50"
+                  >
+                    清除
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="w-px h-6 bg-apple-border" />
+        </>
+      )}
 
       {/* Font Size */}
       <div className="flex items-center gap-2">

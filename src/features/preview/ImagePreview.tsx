@@ -36,7 +36,7 @@ export function ImagePreview() {
   const { content } = useMarkdownContentStore();
   const { theme, fontSize, density, alignment, strongTextColorOverrides } =
     useContentThemeStore();
-  const { images } = useImageStore();
+  const { images, coverImage } = useImageStore();
   const { isEnabled: isFooterEnabled, text: footerText } = useCardFooterStore();
   const setPages = usePaginationResultStore((state) => state.setPages);
   const [currentPage, setCurrentPage] = useState(0);
@@ -291,6 +291,8 @@ export function ImagePreview() {
             markdown={pageContent}
             fontSize={Number.parseInt(currentFontSize, 10)}
             alignment={alignment}
+            imageSrc={coverImage?.dataUrl}
+            imageAlt={coverImage?.name}
           />
         </div>
       );

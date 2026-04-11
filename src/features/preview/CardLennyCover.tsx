@@ -9,6 +9,8 @@ interface CardLennyCoverProps {
   markdown: string;
   fontSize: number;
   alignment: Alignment;
+  imageSrc?: string;
+  imageAlt?: string;
 }
 
 interface LennyCoverContent {
@@ -82,11 +84,11 @@ export function CardLennyCover({
   markdown,
   fontSize,
   alignment,
+  imageSrc,
+  imageAlt,
 }: CardLennyCoverProps) {
   const { title, bodyLines, summaryLines } = extractCoverContent(markdown);
   const hasTitle = title.length > 0;
-  const hasBody = bodyLines.length > 0;
-  const hasSummary = summaryLines.length > 0;
   const textAlign = alignment === "justify" ? "left" : alignment;
   const titleFontSize = getTitleFontSize(fontSize, title);
 
@@ -196,8 +198,8 @@ export function CardLennyCover({
         }}
       >
         <img
-          src="/lenny_headshot.png"
-          alt="Lenny Rachitsky"
+          src={imageSrc || "/lenny_headshot.png"}
+          alt={imageAlt || "Lenny Rachitsky"}
           style={{
             width: "100%",
             height: "100%",
@@ -243,7 +245,7 @@ export function CardLennyCover({
         </div>
       </div>
 
-      {hasBody && (
+      {bodyLines.length > 0 && (
         <div
           style={{
             position: "absolute",
@@ -277,7 +279,7 @@ export function CardLennyCover({
         </div>
       )}
 
-      {hasSummary && (
+      {summaryLines.length > 0 && (
         <div
           style={{
             position: "absolute",

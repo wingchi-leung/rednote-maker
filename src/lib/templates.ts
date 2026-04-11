@@ -85,7 +85,7 @@ export const TEMPLATES: readonly TemplateConfig[] = [
   },
   {
     id: "lennyCover",
-    label: "Lenny 封面",
+    label: "人物模板",
     colors: {
       background: "#FFFFFF",
       text: "#1A1A1A",
@@ -154,6 +154,8 @@ export const themeLabels: Record<Theme, string> = Object.fromEntries(
 ) as Record<Theme, string>;
 
 export const THEME_IDS = TEMPLATES.map((t) => t.id) as Theme[];
+export const PUBLIC_THEME_IDS = THEME_IDS.filter((id) => id !== "lennyCover") as Theme[];
+export const LENNY_THEME_IDS = THEME_IDS;
 
 export const STRONG_TEXT_COLOR_PALETTE = [
   "#0071E3",
