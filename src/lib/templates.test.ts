@@ -3,6 +3,7 @@ import {
   getTemplate,
   getTemplateLayout,
   getCodeBackground,
+  getDefaultStrongTextColor,
   TEMPLATES,
 } from "./templates";
 
@@ -40,6 +41,12 @@ describe("getCodeBackground", () => {
 
   it("returns custom value when specified", () => {
     expect(getCodeBackground("dark")).toBe("rgba(255,255,255,0.08)");
+  });
+});
+
+describe("getDefaultStrongTextColor", () => {
+  it("falls back to accent color when template does not define a custom value", () => {
+    expect(getDefaultStrongTextColor("classic")).toBe("#0071E3");
   });
 });
 

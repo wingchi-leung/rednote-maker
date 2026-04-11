@@ -31,6 +31,7 @@ export interface PaginationOptions {
   density: Density;
   fontSize: FontSize;
   theme: Theme;
+  strongTextColor?: string;
   footer?: {
     isEnabled: boolean;
     text: string;
@@ -67,6 +68,7 @@ interface RenderContext {
   contentWidth: number;
   contentHeight: number;
   accentColor: string;
+  strongTextColor: string;
   backgroundColor: string;
   blockquoteColor: string;
   codeBackground: string;
@@ -100,6 +102,7 @@ function contextKey(context: RenderContext): string {
     context.contentWidth,
     context.contentHeight,
     context.accentColor,
+    context.strongTextColor,
     context.backgroundColor,
     context.blockquoteColor,
     context.codeBackground,
@@ -199,6 +202,7 @@ function getRenderContext(options: PaginationOptions): RenderContext {
     contentWidth: Math.max(120, Math.floor(contentWidth)),
     contentHeight: Math.max(120, Math.floor(contentHeight)),
     accentColor: template.colors.accent,
+    strongTextColor: options.strongTextColor ?? template.strongTextColor ?? template.colors.accent,
     backgroundColor: template.colors.background,
     blockquoteColor: template.blockquoteColor ?? template.colors.accent,
     codeBackground: template.codeBackground ?? "rgba(0,0,0,0.05)",
@@ -237,6 +241,7 @@ function renderMarkdownForMeasurement(markdown: string, context: RenderContext):
     React.createElement(CardMarkdownContent, {
       markdown,
       accentColor: context.accentColor,
+      strongTextColor: context.strongTextColor,
       backgroundColor: context.backgroundColor,
       codeBackground: context.codeBackground,
       blockquoteColor: context.blockquoteColor,

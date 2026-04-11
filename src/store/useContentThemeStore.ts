@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { type Theme } from "@/lib/templates";
+import { getDefaultStrongTextColor, type Theme } from "@/lib/templates";
 
 export type { Theme } from "@/lib/templates";
-export { themeColors } from "@/lib/templates";
+export { STRONG_TEXT_COLOR_PALETTE, themeColors } from "@/lib/templates";
 
 export type FontSize = "sm" | "md" | "lg";
 export type Density = "compact" | "comfortable" | "spacious";
@@ -13,10 +13,13 @@ interface ThemeConfig {
   fontSize: FontSize;
   density: Density;
   alignment: Alignment;
+  strongTextColorOverrides: Partial<Record<Theme, string>>;
   setTheme: (theme: Theme) => void;
   setFontSize: (size: FontSize) => void;
   setDensity: (density: Density) => void;
   setAlignment: (alignment: Alignment) => void;
+  setStrongTextColor: (theme: Theme, color: string) => void;
+  resetStrongTextColor: (theme: Theme) => void;
 }
 
 export const fontSizes = {
@@ -40,13 +43,34 @@ export const densitySpacing = {
   },
 };
 
+export function getStrongTextColor(
+  theme: Theme,
+  overrides: Partial<Record<Theme, string>>
+): string {
+  return overrides[theme] ?? getDefaultStrongTextColor(theme);
+}
+
 export const useContentThemeStore = create<ThemeConfig>((set) => ({
   theme: "classic",
   fontSize: "md",
   density: "comfortable",
   alignment: "left",
+  strongTextColorOverrides: {},
   setTheme: (theme) => set({ theme }),
   setFontSize: (fontSize) => set({ fontSize }),
   setDensity: (density) => set({ density }),
   setAlignment: (alignment) => set({ alignment }),
+  setStrongTextColor: (theme, color) =>
+    set((state) => ({
+      strongTextColorOverrides: {
+        ...state.strongTextColorOverrides,
+        [theme]: color,
+      },
+    })),
+  resetStrongTextColor: (theme) =>
+    set((state) => {
+      const nextOverrides = { ...state.strongTextColorOverrides };
+      delete nextOverrides[theme];
+      return { strongTextColorOverrides: nextOverrides };
+    }),
 }));

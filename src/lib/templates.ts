@@ -30,6 +30,8 @@ export interface TemplateConfig {
   colors: TemplateColors;
   layout: TemplateLayout;
   codeBackground?: string;
+  /** Markdown 加粗文字颜色，不填则用 colors.accent */
+  strongTextColor?: string;
   /** 引用块边框/强调色，不填则用 colors.accent */
   blockquoteColor?: string;
   /** 启用后卡片会渲染有机线条+网格背景，线条颜色为 accent */
@@ -153,6 +155,19 @@ export const themeLabels: Record<Theme, string> = Object.fromEntries(
 
 export const THEME_IDS = TEMPLATES.map((t) => t.id) as Theme[];
 
+export const STRONG_TEXT_COLOR_PALETTE = [
+  "#0071E3",
+  "#E85D3F",
+  "#E5B107",
+  "#8B5A2B",
+  "#6BB5BA",
+  "#C1A7F3",
+  "#D99AAF",
+  "#2F855A",
+  "#1D4ED8",
+  "#B83280",
+] as const;
+
 export function getTemplate(theme: Theme): TemplateConfig {
   const t = TEMPLATES.find((x) => x.id === theme);
   if (!t) throw new Error(`Unknown theme: ${theme}`);
@@ -166,4 +181,9 @@ export function getTemplateLayout(theme: Theme): TemplateLayout {
 export function getCodeBackground(theme: Theme): string {
   const t = getTemplate(theme);
   return t.codeBackground ?? "rgba(0,0,0,0.05)";
+}
+
+export function getDefaultStrongTextColor(theme: Theme): string {
+  const t = getTemplate(theme);
+  return t.strongTextColor ?? t.colors.accent;
 }

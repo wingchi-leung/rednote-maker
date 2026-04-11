@@ -2,13 +2,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
+  getStrongTextColor,
   themeColors,
   useContentThemeStore,
   type FontSize,
   type Density,
   type Alignment,
 } from "@/store/useContentThemeStore";
-import { themeLabels, THEME_IDS } from "@/lib/templates";
+import {
+  getDefaultStrongTextColor,
+  themeLabels,
+  THEME_IDS,
+} from "@/lib/templates";
 import { useCardFooterStore } from "@/store/useCardFooterStore";
 import { usePaginationResultStore } from "@/store/usePaginationResultStore";
 import { DownloadIcon } from "@/components/icons/DownloadIcon";
@@ -32,8 +37,19 @@ const alignmentLabels: Record<Alignment, string> = {
 };
 
 export function SettingsToolbar() {
-  const { theme, fontSize, density, alignment, setTheme, setFontSize, setDensity, setAlignment } =
-    useContentThemeStore();
+  const {
+    theme,
+    fontSize,
+    density,
+    alignment,
+    strongTextColorOverrides,
+    setTheme,
+    setFontSize,
+    setDensity,
+    setAlignment,
+    setStrongTextColor,
+    resetStrongTextColor,
+  } = useContentThemeStore();
   const {
     isEnabled: isFooterEnabled,
     text: footerText,
@@ -48,6 +64,8 @@ export function SettingsToolbar() {
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   const totalPages = pages.length;
+  const strongTextColor = getStrongTextColor(theme, strongTextColorOverrides);
+  const defaultStrongTextColor = getDefaultStrongTextColor(theme);
 
   // 同步：当页数变化时，默认全选
   useEffect(() => {
@@ -127,6 +145,41 @@ export function SettingsToolbar() {
               {themeLabels[key]}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="w-px h-6 bg-apple-border" />
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-gray-500">加粗色</span>
+        <div className="flex items-center gap-2">
+          <label
+            className="flex h-7 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-apple-border bg-white"
+            title="选择当前模板的加粗文字颜色"
+          >
+            <input
+              type="color"
+              value={strongTextColor}
+              onChange={(event) => setStrongTextColor(theme, event.target.value)}
+              className="h-10 w-12 cursor-pointer border-0 bg-transparent p-0"
+              aria-label="选择当前模板的加粗文字颜色"
+            />
+          </label>
+          <span
+            className="min-w-[4.8rem] rounded-md border border-apple-border bg-gray-50 px-2 py-1 text-xs font-mono uppercase text-gray-600"
+            title="当前加粗文字颜色"
+          >
+            {strongTextColor}
+          </span>
+          <button
+            type="button"
+            onClick={() => resetStrongTextColor(theme)}
+            disabled={strongTextColor === defaultStrongTextColor}
+            className="ml-1 rounded px-2 py-1 text-xs font-medium text-apple-blue hover:bg-blue-50 disabled:text-gray-400 disabled:hover:bg-transparent"
+            title="恢复当前模板的默认加粗色"
+          >
+            默认
+          </button>
         </div>
       </div>
 

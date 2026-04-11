@@ -5,6 +5,7 @@ import { exportCards } from "@/lib/exportCards";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import {
   useContentThemeStore,
+  getStrongTextColor,
   themeColors,
   fontSizes,
   densitySpacing,
@@ -33,7 +34,8 @@ type PreviewViewMode = "pagination" | "list";
 
 export function ImagePreview() {
   const { content } = useMarkdownContentStore();
-  const { theme, fontSize, density, alignment } = useContentThemeStore();
+  const { theme, fontSize, density, alignment, strongTextColorOverrides } =
+    useContentThemeStore();
   const { images } = useImageStore();
   const { isEnabled: isFooterEnabled, text: footerText } = useCardFooterStore();
   const setPages = usePaginationResultStore((state) => state.setPages);
@@ -61,18 +63,25 @@ export function ImagePreview() {
       density,
       fontSize,
       theme,
+      strongTextColor: getStrongTextColor(theme, strongTextColorOverrides),
       footer: footerConfig,
     });
     setLocalPages(nextPages);
     setPages(nextPages);
-  }, [content, density, fontSize, theme, footerConfig, setPages]);
+  }, [content, density, fontSize, theme, strongTextColorOverrides, footerConfig, setPages]);
 
   useEffect(() => {
     if (pages.length === 0) {
       return;
     }
 
-    const paginationOptions = { density, fontSize, theme, footer: footerConfig };
+    const paginationOptions = {
+      density,
+      fontSize,
+      theme,
+      strongTextColor: getStrongTextColor(theme, strongTextColorOverrides),
+      footer: footerConfig,
+    };
 
     const splitOverflowPage = (pageContent: string): string[] => {
       const lines = pageContent.split("\n");
@@ -144,7 +153,7 @@ export function ImagePreview() {
     });
 
     return () => cancelAnimationFrame(raf);
-  }, [pages, density, fontSize, theme, footerConfig, setPages]);
+  }, [pages, density, fontSize, theme, strongTextColorOverrides, footerConfig, setPages]);
 
   // 内容变短时把当前页钳在有效范围内
   useEffect(() => {
@@ -232,6 +241,7 @@ export function ImagePreview() {
   const currentColors = themeColors[theme];
   const currentFontSize = fontSizes[fontSize];
   const currentDensity = densitySpacing[density];
+  const strongTextColor = getStrongTextColor(theme, strongTextColorOverrides);
 
   // Render a single card; in list mode all cards are visible, in pagination only current
   const renderPage = (
@@ -307,6 +317,7 @@ export function ImagePreview() {
             <CardMarkdownContent
               markdown={pageContent}
               accentColor={currentColors.accent}
+              strongTextColor={strongTextColor}
               backgroundColor={currentColors.background}
               codeBackground={codeBg}
               blockquoteColor={blockquoteColor}

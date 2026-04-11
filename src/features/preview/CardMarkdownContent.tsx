@@ -16,6 +16,7 @@ export interface CardMarkdownImage {
 
 interface CreateMarkdownComponentsOptions {
   accentColor: string;
+  strongTextColor: string;
   backgroundColor: string;
   codeBackground: string;
   blockquoteColor: string;
@@ -82,6 +83,7 @@ export function preprocessHighlight(markdown: string): string {
 
 export function createMarkdownComponents({
   accentColor,
+  strongTextColor,
   backgroundColor,
   codeBackground,
   blockquoteColor,
@@ -140,7 +142,7 @@ export function createMarkdownComponents({
       </pre>
     ),
     strong: ({ children }: { children?: ReactNode }) => (
-      <strong className="font-bold" style={{ color: accentColor }}>
+      <strong className="font-bold" style={{ color: strongTextColor }}>
         {children}
       </strong>
     ),
@@ -197,6 +199,7 @@ export function createMarkdownComponents({
 export function CardMarkdownContent({
   markdown,
   accentColor,
+  strongTextColor,
   backgroundColor,
   codeBackground,
   blockquoteColor,
@@ -208,6 +211,7 @@ export function CardMarkdownContent({
       rehypePlugins={[rehypeRaw]}
       components={createMarkdownComponents({
         accentColor,
+        strongTextColor,
         backgroundColor,
         codeBackground,
         blockquoteColor,

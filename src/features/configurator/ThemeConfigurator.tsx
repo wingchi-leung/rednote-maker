@@ -1,16 +1,14 @@
 "use client";
 
 import {
+  getStrongTextColor,
   themeColors,
-  fontSizes,
-  densitySpacing,
   useContentThemeStore,
-  type Theme,
   type FontSize,
   type Density,
   type Alignment,
 } from "@/store/useContentThemeStore";
-import { themeLabels, THEME_IDS } from "@/lib/templates";
+import { getDefaultStrongTextColor, themeLabels, THEME_IDS } from "@/lib/templates";
 
 const fontSizeLabels: Record<FontSize, string> = {
   sm: "小",
@@ -31,8 +29,21 @@ const alignmentLabels: Record<Alignment, string> = {
 };
 
 export function ThemeConfigurator() {
-  const { theme, fontSize, density, alignment, setTheme, setFontSize, setDensity, setAlignment } =
-    useContentThemeStore();
+  const {
+    theme,
+    fontSize,
+    density,
+    alignment,
+    strongTextColorOverrides,
+    setTheme,
+    setFontSize,
+    setDensity,
+    setAlignment,
+    setStrongTextColor,
+    resetStrongTextColor,
+  } = useContentThemeStore();
+  const strongTextColor = getStrongTextColor(theme, strongTextColorOverrides);
+  const defaultStrongTextColor = getDefaultStrongTextColor(theme);
 
   return (
     <div className="space-y-6 p-4">
@@ -67,6 +78,40 @@ export function ThemeConfigurator() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <label className="block text-sm font-medium text-gray-700">加粗文字颜色</label>
+          <button
+            type="button"
+            onClick={() => resetStrongTextColor(theme)}
+            disabled={strongTextColor === defaultStrongTextColor}
+            className="text-xs font-medium text-apple-blue disabled:text-gray-400"
+          >
+            恢复默认
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <label
+            className="flex h-11 w-14 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-apple-border bg-white"
+            title="选择当前模板的加粗文字颜色"
+          >
+            <input
+              type="color"
+              value={strongTextColor}
+              onChange={(event) => setStrongTextColor(theme, event.target.value)}
+              className="h-14 w-16 cursor-pointer border-0 bg-transparent p-0"
+              aria-label="选择当前模板的加粗文字颜色"
+            />
+          </label>
+          <span className="rounded-lg border border-apple-border bg-gray-50 px-3 py-2 text-sm font-mono uppercase text-gray-600">
+            {strongTextColor}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          当前模板会记住自己的加粗色，切换模板后互不影响。
+        </p>
       </div>
 
       {/* Font Size */}
