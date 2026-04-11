@@ -146,6 +146,8 @@ export function CardLennyCover({
             top: 58,
             left: 34,
             right: 34,
+            bottom: 320,
+            overflow: "hidden",
             zIndex: 3,
           }}
         >
@@ -164,7 +166,6 @@ export function CardLennyCover({
           <h1
             style={{
               margin: 0,
-              maxWidth: 320,
               fontSize: `${titleFontSize}px`,
               fontWeight: 800,
               color: textColor,
@@ -173,6 +174,7 @@ export function CardLennyCover({
               textAlign,
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
+              wordWrap: "break-word",
             }}
           >
             {title}
@@ -246,9 +248,9 @@ export function CardLennyCover({
           style={{
             position: "absolute",
             left: 36,
-            top: hasTitle ? 232 : 132,
+            top: hasTitle ? 268 : 132,
+            bottom: 160,
             width: 176,
-            maxHeight: 248,
             overflow: "hidden",
             zIndex: 3,
           }}
