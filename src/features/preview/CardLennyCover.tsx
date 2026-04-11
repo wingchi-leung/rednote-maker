@@ -62,18 +62,18 @@ function getTitleFontSize(baseFontSize: number, title: string): number {
   const length = Array.from(title).length;
 
   if (length <= 8) {
-    return Math.round(baseFontSize * 3.8);
+    return Math.round(baseFontSize * 3.4);
   }
 
   if (length <= 14) {
-    return Math.round(baseFontSize * 3.1);
+    return Math.round(baseFontSize * 2.8);
   }
 
   if (length <= 22) {
-    return Math.round(baseFontSize * 2.6);
+    return Math.round(baseFontSize * 2.1);
   }
 
-  return Math.round(baseFontSize * 2.2);
+  return Math.round(baseFontSize * 1.8);
 }
 
 export function CardLennyCover({
@@ -126,10 +126,10 @@ export function CardLennyCover({
           position: "absolute",
           top: 38,
           right: 24,
-          fontSize: `${Math.max(10, Math.round(fontSize * 0.72))}px`,
+          fontSize: `${Math.max(10, Math.round(fontSize * 0.5))}px`,
           fontWeight: 300,
           color: "#A6A09A",
-          lineHeight: 1.7,
+          lineHeight: 1.1,
           letterSpacing: "0.04em",
           textAlign: "right",
           whiteSpace: "pre-line",
@@ -146,7 +146,7 @@ export function CardLennyCover({
             top: 58,
             left: 34,
             right: 34,
-            bottom: 320,
+            bottom: 290,
             overflow: "hidden",
             zIndex: 3,
           }}
@@ -299,7 +299,7 @@ export function CardLennyCover({
           <div
             style={{
               maxWidth: 190,
-              fontSize: `${Math.round(fontSize * 1.02)}px`,
+              fontSize: `${Math.round(fontSize * 0.82)}px`,
               lineHeight: 1.76,
               color: "#8E8378",
               fontWeight: 400,

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
+import { exportCards } from "@/lib/exportCards";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import {
   useContentThemeStore,
@@ -29,41 +28,6 @@ import {
 } from "@/features/preview/CardMarkdownContent";
 import { CardFooter } from "@/features/preview/CardFooter";
 import { QuoteIcon } from "@/components/icons/QuoteIcon";
-import html2canvas from "html2canvas";
-
-/** 从 Markdown 内容中提取第一句话作为文件名 */
-function extractFirstSentence(md: string): string {
-  // 按行分割，找到第一个非空行
-  const lines = md.split("\n");
-  for (const line of lines) {
-    // 去掉 markdown 标题符号
-    let text = line.replace(/^#+\s*/, "").trim();
-    // 跳过空行、分割线、引用块开头
-    if (!text || text === "---" || text.startsWith(">")) continue;
-    // 去掉 markdown 格式符号
-    text = text
-      .replace(/\*\*/g, "") // 加粗
-      .replace(/\*/g, "")   // 斜体
-      .replace(/`/g, "")    // 代码
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // 链接，保留文字
-      .replace(/!\[([^\]]*)\]\([^)]+\)/g, "") // 图片，去掉
-      .trim();
-    if (!text) continue;
-    // 截取第一句话（以句号、问号、感叹号结尾）
-    const match = text.match(/^[^。！？\n]+[。！？]?/);
-    if (match) {
-      text = match[0];
-    }
-    // 去掉不适合做文件名的字符
-    text = text.replace(/[\\/:*?"<>|]/g, "");
-    // 限制长度
-    if (text.length > 30) {
-      text = text.slice(0, 30);
-    }
-    return text || "rednote";
-  }
-  return "rednote";
-}
 
 type PreviewViewMode = "pagination" | "list";
 
@@ -226,60 +190,28 @@ export function ImagePreview() {
   // Handle export event: pageIndices 为要导出的页码（0-based），多张时打包为 zip
   useEffect(() => {
     const handleExport = async (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const {
-        pageIndices,
-        totalPages,
-        onProgress,
-        onComplete,
-      } = customEvent.detail as {
-        pageIndices?: number[];
-        totalPages: number;
-        onProgress: (p: { current: number; total: number }) => void;
-        onComplete?: () => void;
-      };
+      const { pageIndices, totalPages, onProgress, onComplete } =
+        (event as CustomEvent).detail as {
+          pageIndices?: number[];
+          totalPages: number;
+          onProgress: (p: { current: number; total: number }) => void;
+          onComplete?: () => void;
+        };
       const indices =
         pageIndices ?? Array.from({ length: totalPages }, (_, i) => i);
       if (indices.length === 0) return;
       setIsExporting(true);
-
-      // 提取第一句话作为文件名前缀
-      const fileNamePrefix = extractFirstSentence(content);
-
       try {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const blobs: { blob: Blob; name: string }[] = [];
-        for (let j = 0; j < indices.length; j++) {
-          const pageIndex = indices[j];
-          const element = exportRefs.current[pageIndex];
-          if (!element) continue;
-          const captured = await html2canvas(element, {
-            scale: CARD_CONFIG.scale,
-            backgroundColor: themeColors[theme].background,
-            logging: false,
-          });
-          const blob = await new Promise<Blob | null>((resolveBlob) => {
-            captured.toBlob(resolveBlob, "image/png");
-          });
-          if (blob) {
-            blobs.push({
-              blob,
-              name: `${fileNamePrefix}-${pageIndex + 1}.png`,
-            });
-          }
-          onProgress({ current: j + 1, total: indices.length });
-        }
-        if (blobs.length <= 3) {
-          blobs.forEach(({ blob, name }) => saveAs(blob, name));
-        } else {
-          const zip = new JSZip();
-          blobs.forEach(({ blob, name }) => zip.file(name, blob));
-          const zipBlob = await zip.generateAsync({ type: "blob" });
-          saveAs(zipBlob, `${fileNamePrefix}.zip`);
-        }
+        await exportCards({
+          indices,
+          elements: exportRefs.current,
+          theme,
+          content,
+          onProgress,
+          onComplete,
+        });
       } finally {
         setIsExporting(false);
-        onComplete?.();
       }
     };
 
@@ -603,7 +535,7 @@ export function ImagePreview() {
                       height: `${CARD_CONFIG.previewHeight}px`,
                     }}
                   >
-                    {renderPage(pageContent, index, true)}
+                    {renderPage(pageContent, index, true, false)}
                   </div>
                 ))}
               </div>
@@ -628,7 +560,7 @@ export function ImagePreview() {
               }}
             >
               <div className="w-full h-full">
-                {renderPage(pages[currentPage] || "", currentPage)}
+                {renderPage(pages[currentPage] || "", currentPage, false, false)}
               </div>
             </div>
           </div>
@@ -652,6 +584,24 @@ export function ImagePreview() {
             }}
           >
             {renderPage(pageContent, index, true, false)}
+          </div>
+        ))}
+      </div>
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed"
+        style={{ left: -26000, top: 0 }}
+      >
+        {pages.map((pageContent, index) => (
+          <div
+            key={`export-${index}`}
+            style={{
+              width: `${CARD_CONFIG.previewWidth}px`,
+              height: `${CARD_CONFIG.previewHeight}px`,
+            }}
+          >
+            {renderPage(pageContent, index, true, true)}
           </div>
         ))}
       </div>
