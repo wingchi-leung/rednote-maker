@@ -35,6 +35,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  verification: {
+    google: "1fKuu7Ywpk8WseVhu3GUJgcgKxaESaMI00j_zEsE2o4",
+  },
   twitter: {
     card: "summary_large_image",
     title: "RedNoteMaker - Markdown 转小红书图文卡片",

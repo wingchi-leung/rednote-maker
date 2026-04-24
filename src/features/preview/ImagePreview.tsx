@@ -254,12 +254,19 @@ export function ImagePreview() {
       forceVisible || index === currentPage;
     const displayStyle = isVisible ? {} : { display: "none" };
 
-    const layout = getTemplateLayout(theme);
-    const template = getTemplate(theme);
+    // Lenny 页面特殊逻辑：第一页用 lennyCover 模板，第二页及以后用莫兰迪主题
+    const effectiveTheme = theme === "lennyCover" && index > 0 ? "morandi" : theme;
+    const effectiveColors = themeColors[effectiveTheme];
+    const effectiveStrongTextColor = effectiveTheme === "morandi"
+      ? getStrongTextColor("morandi", strongTextColorOverrides)
+      : strongTextColor;
+
+    const layout = getTemplateLayout(effectiveTheme);
+    const template = getTemplate(effectiveTheme);
     const hasCustomHeader = layout === "appleNotes";
     const hasSketchDecoration = template.decoration === "sketch";
-    const codeBg = getCodeBackground(theme);
-    const blockquoteColor = template.blockquoteColor ?? currentColors.accent;
+    const codeBg = getCodeBackground(effectiveTheme);
+    const blockquoteColor = template.blockquoteColor ?? effectiveColors.accent;
 
     const setExportRef = (element: HTMLElement | null) => {
       if (!trackExportRef) {
@@ -269,7 +276,7 @@ export function ImagePreview() {
       exportRefs.current[index] = element;
     };
 
-    // Lenny 封面：专属布局，但标题与文案仍来自 markdown
+    // Lenny 封面：专属布局，但标题与文案仍来自 markdown（仅第一页）
     if (layout === "lennyCover") {
       return (
         <div
@@ -286,8 +293,8 @@ export function ImagePreview() {
           }}
         >
           <CardLennyCover
-            accentColor={currentColors.accent}
-            textColor={currentColors.text}
+            accentColor={effectiveColors.accent}
+            textColor={effectiveColors.text}
             markdown={pageContent}
             fontSize={Number.parseInt(currentFontSize, 10)}
             alignment={alignment}
@@ -301,7 +308,7 @@ export function ImagePreview() {
     const cardContent = (
       <>
         {layout === "appleNotes" && (
-          <CardHeaderAppleNotes accentColor={currentColors.accent} />
+          <CardHeaderAppleNotes accentColor={effectiveColors.accent} />
         )}
         <div
           style={{
@@ -318,23 +325,23 @@ export function ImagePreview() {
           <div className="min-h-0 flex-1 overflow-hidden">
             <CardMarkdownContent
               markdown={pageContent}
-              accentColor={currentColors.accent}
-              strongTextColor={strongTextColor}
-              backgroundColor={currentColors.background}
+              accentColor={effectiveColors.accent}
+              strongTextColor={effectiveStrongTextColor}
+              backgroundColor={effectiveColors.background}
               codeBackground={codeBg}
               blockquoteColor={blockquoteColor}
               images={images}
             />
           </div>
           {footerConfig.isEnabled && (
-            <CardFooter text={footerConfig.text} accentColor={currentColors.accent} />
+            <CardFooter text={footerConfig.text} accentColor={effectiveColors.accent} />
           )}
         </div>
       </>
     );
 
     const contentStyle: React.CSSProperties = {
-      color: currentColors.text,
+      color: effectiveColors.text,
       fontSize: currentFontSize,
       fontFamily: CARD_FONT_FAMILY,
       padding: hasCustomHeader ? 0 : currentDensity.padding,
@@ -363,10 +370,10 @@ export function ImagePreview() {
         >
           <div
             className="absolute inset-0 rounded-lg"
-            style={{ backgroundColor: currentColors.background, zIndex: 0 }}
+            style={{ backgroundColor: effectiveColors.background, zIndex: 0 }}
             aria-hidden
           />
-          <SketchBackground accentColor={currentColors.accent} />
+          <SketchBackground accentColor={effectiveColors.accent} />
           <div
             style={{
               ...contentStyle,
@@ -391,14 +398,14 @@ export function ImagePreview() {
           className="card-content rounded-lg"
           style={{
             ...contentStyle,
-            backgroundColor: currentColors.background,
+            backgroundColor: effectiveColors.background,
           }}
         >
           {cardFrame.topLine && (
             <div
               style={{
                 height: "1px",
-                backgroundColor: currentColors.accent,
+                backgroundColor: effectiveColors.accent,
                 width: "100%",
                 flexShrink: 0,
               }}
@@ -424,7 +431,7 @@ export function ImagePreview() {
     }
 
     const isDefaultDark =
-      theme === "dark" && !hasSketchDecoration && !template.cardFrame;
+      effectiveTheme === "dark" && !hasSketchDecoration && !template.cardFrame;
     return (
       <div
         key={index}
@@ -433,7 +440,7 @@ export function ImagePreview() {
         style={{
           ...contentStyle,
           position: "relative",
-          backgroundColor: currentColors.background,
+          backgroundColor: effectiveColors.background,
           ...(isDefaultDark && {
             boxShadow: "inset 0 0 0 1px rgba(168,132,238,0.15)",
           }),
