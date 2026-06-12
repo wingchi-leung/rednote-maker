@@ -7,7 +7,7 @@
  * - codeBackground: 可选，代码块背景色（不填则用默认浅色）
  */
 
-export type TemplateLayout = "default" | "appleNotes" | "lennyCover";
+export type TemplateLayout = "default" | "appleNotes" | "lennyCover" | "moversCover";
 
 /** 卡片背景装饰：sketch = 白底 + 有机线条 + 细微网格，线条色用 colors.accent */
 export type TemplateDecoration = "sketch";
@@ -94,6 +94,16 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     layout: "lennyCover",
     blockquoteColor: "#F59E0B",
     codeBackground: "rgba(232,93,63,0.08)",
+  },
+  {
+    id: "moversCover",
+    label: "前行者",
+    colors: {
+      background: "#EDE8F7",
+      text: "#1E1430",
+      accent: "#7B5EA7",
+    },
+    layout: "moversCover",
   },
   {
     id: "appleNotes",

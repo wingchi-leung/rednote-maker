@@ -23,6 +23,7 @@ import { ViewSingleIcon } from "@/components/icons/ViewSingleIcon";
 import { ViewListIcon } from "@/components/icons/ViewListIcon";
 import { CardHeaderAppleNotes } from "@/features/preview/CardHeaderAppleNotes";
 import { CardLennyCover } from "@/features/preview/CardLennyCover";
+import { CardMoversCover } from "@/features/preview/CardMoversCover";
 import {
   CARD_FONT_FAMILY,
   CardMarkdownContent,
@@ -300,6 +301,31 @@ export function ImagePreview() {
             alignment={alignment}
             imageSrc={coverImage?.dataUrl}
             imageAlt={coverImage?.name}
+          />
+        </div>
+      );
+    }
+
+    // Movers 封面：固定布局，走路人插图 + 大标题 + 特性栏
+    if (layout === "moversCover") {
+      return (
+        <div
+          key={index}
+          ref={setExportRef}
+          className="card-content rounded-lg"
+          style={{
+            width: `${CARD_CONFIG.previewWidth}px`,
+            height: `${CARD_CONFIG.previewHeight}px`,
+            position: "relative",
+            overflow: "hidden",
+            flexShrink: 0,
+            ...displayStyle,
+          }}
+        >
+          <CardMoversCover
+            accentColor={effectiveColors.accent}
+            textColor={effectiveColors.text}
+            markdown={pageContent}
           />
         </div>
       );
