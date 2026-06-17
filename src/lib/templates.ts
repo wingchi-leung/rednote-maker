@@ -99,9 +99,9 @@ export const TEMPLATES: readonly TemplateConfig[] = [
     id: "moversCover",
     label: "前行者",
     colors: {
-      background: "#EDE8F7",
+      background: "#FEFCFB",
       text: "#1E1430",
-      accent: "#7B5EA7",
+      accent: "#8E6CBD",
     },
     layout: "moversCover",
   },

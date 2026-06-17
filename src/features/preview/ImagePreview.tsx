@@ -326,6 +326,7 @@ export function ImagePreview() {
             accentColor={effectiveColors.accent}
             textColor={effectiveColors.text}
             markdown={pageContent}
+            exportMode={trackExportRef}
           />
         </div>
       );
