@@ -8,7 +8,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { useMarkdownContentStore } from "@/store/useMarkdownContentStore";
 import { useContentThemeStore } from "@/store/useContentThemeStore";
 import { useImageStore } from "@/store/useImageStore";
-import { LENNY_COVER_PRESET } from "@/lib/presetContents";
+import { LENNY_COVER_PRESET, MOVERS_COVER_PRESET } from "@/lib/presetContents";
 import { ResetIcon } from "@/components/icons/ResetIcon";
 import { KebabMenuIcon } from "@/components/icons/KebabMenuIcon";
 
@@ -26,8 +26,9 @@ interface MarkdownEditorProps {
 
 export function MarkdownEditor({ showLennyPreset = false }: MarkdownEditorProps) {
   const { content, setContent, resetContent } = useMarkdownContentStore();
-  const { setTheme, setDensity, setFontSize, setAlignment } = useContentThemeStore();
+  const { theme, setTheme, setDensity, setFontSize, setAlignment } = useContentThemeStore();
   const addImage = useImageStore((state) => state.addImage);
+  const editorPlaceholder = theme === "moversCover" ? "写法示例" : "在这里输入 Markdown 内容";
 
   // Use ref to store the latest addImage to avoid recreating the extension
   const addImageRef = useRef(addImage);
@@ -45,6 +46,14 @@ export function MarkdownEditor({ showLennyPreset = false }: MarkdownEditorProps)
   const handleInsertLennyPreset = useCallback(() => {
     setContent(LENNY_COVER_PRESET);
     setTheme("lennyCover");
+    setDensity("compact");
+    setFontSize("md");
+    setAlignment("left");
+  }, [setAlignment, setContent, setDensity, setFontSize, setTheme]);
+
+  const handleInsertMoversPreset = useCallback(() => {
+    setContent(MOVERS_COVER_PRESET);
+    setTheme("moversCover");
     setDensity("compact");
     setFontSize("md");
     setAlignment("left");
@@ -135,11 +144,25 @@ export function MarkdownEditor({ showLennyPreset = false }: MarkdownEditorProps)
     []
   );
 
+  const editorExtensions = useMemo(
+    () => [markdown(), EditorView.lineWrapping, pasteExtension, boldShortcutExtension],
+    [boldShortcutExtension, pasteExtension]
+  );
+
   return (
     <div className="h-full flex flex-col">
       <div className="px-4 py-3 border-b border-apple-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">编辑器</h2>
         <div className="flex items-center gap-1">
+          {theme === "moversCover" && (
+            <button
+              type="button"
+              onClick={handleInsertMoversPreset}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-[#6B5A78] hover:bg-[#F3EEF6] transition-colors"
+            >
+              套用前行者封面
+            </button>
+          )}
           {showLennyPreset && (
             <button
               type="button"
@@ -169,13 +192,9 @@ export function MarkdownEditor({ showLennyPreset = false }: MarkdownEditorProps)
       <div className="flex-1 overflow-x-hidden overflow-y-auto min-h-0">
         <CodeMirror
           value={content}
+          placeholder={editorPlaceholder}
           height="100%"
-          extensions={[
-            markdown(),
-            EditorView.lineWrapping,
-            pasteExtension,
-            boldShortcutExtension,
-          ]}
+          extensions={editorExtensions}
           onChange={handleChange}
           className="text-sm"
           basicSetup={CODEMIRROR_BASIC_SETUP}
