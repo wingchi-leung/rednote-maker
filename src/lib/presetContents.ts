@@ -6,7 +6,7 @@ export const LENNY_COVER_PRESET =
   "底部可以放一句补充说明。\n";
 
 export const MOVERS_COVER_PRESET =
-  "# 这里写主题标题或一句话钩子\n\n" +
+  "# AI时代前10%的人在做什么\n\n" +
   "这里写一段主题简介。\n" +
   "也可以写趋势、亮点或核心观点。\n\n" +
   "@@@\n\n" +

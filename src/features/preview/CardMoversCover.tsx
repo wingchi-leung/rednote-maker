@@ -6,13 +6,17 @@ interface CardMoversCoverProps {
   accentColor: string;
   textColor: string;
   markdown: string;
-  exportMode?: boolean;
 }
 
 interface MoversCoverContent {
   title: string;
   subtitle: string;
   features: Array<{ title: string; desc: string }>;
+}
+
+interface InlineSegment {
+  text: string;
+  bold: boolean;
 }
 
 function stripMarkdown(text: string): string {
@@ -25,6 +29,56 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+function splitBoldSegments(text: string): InlineSegment[] {
+  const segments: InlineSegment[] = [];
+  const pattern = /\*\*([\s\S]+?)\*\*/g;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      segments.push({
+        text: text.slice(lastIndex, index),
+        bold: false,
+      });
+    }
+
+    segments.push({
+      text: match[1] ?? "",
+      bold: true,
+    });
+
+    lastIndex = index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({
+      text: text.slice(lastIndex),
+      bold: false,
+    });
+  }
+
+  return segments.length > 0 ? segments : [{ text, bold: false }];
+}
+
+function renderInlineMarkdown(
+  text: string,
+  normalStyle: React.CSSProperties,
+  boldStyle: React.CSSProperties
+): React.ReactNode[] {
+  return splitBoldSegments(text).map((segment, index) =>
+    segment.bold ? (
+      <span key={`${segment.text}-${index}`} style={boldStyle}>
+        {segment.text}
+      </span>
+    ) : (
+      <span key={`${segment.text}-${index}`} style={normalStyle}>
+        {segment.text}
+      </span>
+    )
+  );
+}
+
 function parseMoversCoverContent(markdown: string): MoversCoverContent {
   const lines = markdown.split("\n").map((l) => l.trim());
 
@@ -33,7 +87,7 @@ function parseMoversCoverContent(markdown: string): MoversCoverContent {
 
   for (const line of lines) {
     if (/^#+\s/.test(line)) {
-      title = stripMarkdown(line.replace(/^#+\s+/, ""));
+      title = line.replace(/^#+\s+/, "").trim();
     } else if (line.length > 0) {
       bodyLines.push(line);
     }
@@ -44,7 +98,7 @@ function parseMoversCoverContent(markdown: string): MoversCoverContent {
   const featurePart = sepIdx >= 0 ? bodyLines.slice(sepIdx + 1) : [];
 
   const subtitle = subtitlePart
-    .map(stripMarkdown)
+    .map((line) => line.replace(/!\[[^\]]*\]\([^)]+\)/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1"))
     .filter((l) => l.length > 0)
     .join(" ");
 
@@ -96,24 +150,14 @@ export function CardMoversCover({
   accentColor,
   textColor,
   markdown,
-  exportMode = false,
 }: CardMoversCoverProps) {
   const { title, subtitle, features } = parseMoversCoverContent(markdown);
-  const isEmptyContent = markdown.trim().length === 0;
   const BG = "#faf5f3";
   const TOP_ART_HEIGHT = 150;
   const taglineColor = "rgba(92,74,130,0.68)";
   const subtitleColor = "rgb(88, 88, 88)";
   const featureDescColor = "rgba(84, 84, 84, 0.68)";
-  const titlePlaceholderStyle: React.CSSProperties = {
-    fontSize: 30,
-    fontWeight: 500,
-    color: "rgb(95, 95, 95)",
-    lineHeight: 1.08,
-    letterSpacing: "0.03em",
-    marginBottom: 14,
-    flexShrink: 0,
-  };
+  const defaultTitle = "AI时代前10%的人在做什么";
   const leadCopyStyle: React.CSSProperties = {
     width: "min(320px, 100%)",
     minHeight: 108,
@@ -127,6 +171,27 @@ export function CardMoversCover({
     fontSize: 14,
     color: subtitleColor,
     lineHeight: 1.75,
+  };
+  const titleTextStyle: React.CSSProperties = {
+    fontSize: 40,
+    fontWeight: 500,
+    color: textColor,
+    lineHeight: 1.08,
+    letterSpacing: "0.02em",
+    marginBottom: 14,
+    flexShrink: 0,
+    whiteSpace: "pre-wrap",
+  };
+  const titleBoldStyle: React.CSSProperties = {
+    color: accentColor,
+    fontWeight: 700,
+  };
+  const subtitleNormalStyle: React.CSSProperties = {
+    color: subtitleColor,
+  };
+  const subtitleBoldStyle: React.CSSProperties = {
+    color: accentColor,
+    fontWeight: 700,
   };
 
   return (
@@ -180,56 +245,10 @@ export function CardMoversCover({
           padding: "0 32px",
         }}
       >
-        {/* Tagline */}
-        <div
-          style={{
-            display: "inline-flex",
-            alignSelf: "flex-start",
-            alignItems: "center",
-            justifyContent: "center",
-            height: 21,
-            padding: "0 12px",
-            borderRadius: 9999,
-            backgroundColor: "rgba(150, 127, 195, 0.1)",
-            color: "rgba(92,74,130,0.8)",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            lineHeight: 1,
-            marginTop: -4,
-            marginBottom: 10,
-            boxSizing: "border-box",
-          }}
-        >
-          <span
-            style={{
-              display: "block",
-              lineHeight: 1,
-              transform: exportMode ? "translateY(-5px)" : "translateY(0)",
-            }}
-          >
-            AI时代前10%的人在做什么
-          </span>
-        </div>
-
         {/* Title */}
-        {title ? (
-          <div
-            style={{
-              fontSize: 33,
-              fontWeight: 400,
-              color: textColor,
-              lineHeight: 1.08,
-              letterSpacing: "0.05em",
-              marginBottom: 14,
-              flexShrink: 0,
-            }}
-          >
-            {title}
-          </div>
-        ) : isEmptyContent ? (
-          <div style={titlePlaceholderStyle}>写法示例</div>
-        ) : null}
+        <div style={titleTextStyle}>
+          {title ? renderInlineMarkdown(title, { color: textColor }, titleBoldStyle) : defaultTitle}
+        </div>
 
         {/* Lead copy */}
         {subtitle && (
@@ -249,7 +268,9 @@ export function CardMoversCover({
               <span style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "rgba(156,132,208,0.45)" }} />
               <span style={{ flex: 1, height: 1, backgroundColor: "rgba(156,132,208,0.22)" }} />
             </div>
-            <div style={leadTextStyle}>{subtitle}</div>
+            <div style={leadTextStyle}>
+              {renderInlineMarkdown(subtitle, subtitleNormalStyle, subtitleBoldStyle)}
+            </div>
           </div>
         )}
 
