@@ -168,7 +168,7 @@ export function CardMoversCover({
     marginBottom: 18,
   };
   const leadTextStyle: React.CSSProperties = {
-    fontSize: 14,
+    fontSize: 18,
     color: subtitleColor,
     lineHeight: 1.75,
   };
@@ -193,6 +193,18 @@ export function CardMoversCover({
     color: accentColor,
     fontWeight: 700,
   };
+  const peopleIllustrationStyle: React.CSSProperties = {
+    position: "absolute",
+    right: 24,
+    bottom: 44,
+    width: 220,
+    height: "auto",
+    pointerEvents: "none",
+    userSelect: "none",
+    display: "block",
+    objectFit: "contain",
+    opacity: 0.96,
+  };
 
   return (
     <div
@@ -204,6 +216,13 @@ export function CardMoversCover({
         fontFamily: CARD_FONT_FAMILY,
       }}
     >
+      <img
+        src="/people.png"
+        alt=""
+        aria-hidden
+        style={peopleIllustrationStyle}
+      />
+
       {/* Top art band */}
       <div
         aria-hidden
@@ -253,21 +272,6 @@ export function CardMoversCover({
         {/* Lead copy */}
         {subtitle && (
           <div style={leadCopyStyle}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 10,
-                opacity: 0.75,
-              }}
-            >
-              <span style={{ flex: 1, height: 1, backgroundColor: "rgba(156,132,208,0.22)" }} />
-              <span style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "rgba(156,132,208,0.45)" }} />
-              <span style={{ width: 3, height: 3, borderRadius: 9999, backgroundColor: "rgba(156,132,208,0.3)" }} />
-              <span style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "rgba(156,132,208,0.45)" }} />
-              <span style={{ flex: 1, height: 1, backgroundColor: "rgba(156,132,208,0.22)" }} />
-            </div>
             <div style={leadTextStyle}>
               {renderInlineMarkdown(subtitle, subtitleNormalStyle, subtitleBoldStyle)}
             </div>

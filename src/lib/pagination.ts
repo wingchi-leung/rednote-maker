@@ -561,7 +561,7 @@ export function calculatePages(
 
   const paginationOptions: PaginationOptions =
     typeof options === "number" || !options
-      ? { density: "comfortable", fontSize: "md", theme: "classic" }
+      ? { density: "comfortable", fontSize: "lg", theme: "classic" }
       : options;
 
   const segments = splitByPageBreak(markdown);

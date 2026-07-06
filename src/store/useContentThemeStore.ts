@@ -52,7 +52,7 @@ export function getStrongTextColor(
 
 export const useContentThemeStore = create<ThemeConfig>((set) => ({
   theme: "classic",
-  fontSize: "md",
+  fontSize: "lg",
   density: "comfortable",
   alignment: "left",
   strongTextColorOverrides: {},
